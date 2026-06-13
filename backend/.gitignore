@@ -1,0 +1,30 @@
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Feature store (generated SQLite DB) ---
+feature_store.sqlite
+feature_store.sqlite-wal
+feature_store.sqlite-shm
+
+# --- Runtime I/O: ignore ALL contents of these dirs, but keep the empty
+#     folders themselves (each has a .gitignore that excludes itself). ---
+#   samples/  — uploaded APKs (runtime input)
+#   reports/  — MobSF static/dynamic dumps + per-analysis result JSON
+
+# --- OS / editor cruft ---
+.DS_Store
