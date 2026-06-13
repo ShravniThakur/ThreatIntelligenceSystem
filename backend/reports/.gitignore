@@ -1,0 +1,4 @@
+# Ignore everything in reports/ (MobSF dumps + per-analysis result JSON are
+# generated at runtime) but keep the folder itself tracked.
+*
+!.gitignore
