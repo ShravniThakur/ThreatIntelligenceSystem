@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>APK Threat Intelligence — GenAI Malware Analysis</title>
+
+  <!-- CDN-only, no build step. React 18 + Babel standalone (JSX in-browser). -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- D3 v7 — force-directed network graph (D3 owns the DOM inside its <svg>). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <!-- marked — render the final GenAI report (Markdown -> HTML). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel2: #1c2330;
+      --border: #30363d;
+      --accent: #00d4aa;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --low: #3fb950;
+      --medium: #d29922;
+      --high: #db6d28;
+      --critical: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 80px; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 28px;
+    }
+    .brand { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+    .brand .dot { color: var(--accent); }
+    .nav button {
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+      padding: 7px 14px; border-radius: 6px; cursor: pointer; font: inherit; margin-left: 8px;
+    }
+    .nav button.active, .nav button:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Upload view */
+    .drop {
+      border: 2px dashed var(--border); border-radius: 14px; padding: 60px 24px;
+      text-align: center; transition: .15s; cursor: pointer; background: var(--panel);
+    }
+    .drop.hot { border-color: var(--accent); background: #11241f; }
+    .drop h2 { margin: 8px 0; font-size: 20px; }
+    .drop p { color: var(--muted); margin: 6px 0; }
+    .drop .icon { font-size: 46px; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 18px; text-align: center; }
+
+    /* Progress */
+    .progress-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px; margin-top: 26px; }
+    .bar { height: 10px; background: var(--panel2); border-radius: 6px; overflow: hidden; margin: 18px 0; }
+    .bar > div { height: 100%; background: linear-gradient(90deg, var(--accent), #2bd9b4); transition: width .4s ease; }
+    .stages { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stage { font-size: 12px; padding: 5px 10px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); }
+    .stage.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+    .stage.done { color: var(--low); border-color: var(--low); }
+    .errbox { background: #2d1417; border: 1px solid var(--critical); color: #ffb4ae; padding: 14px 16px; border-radius: 10px; margin-top: 18px; }
+
+    /* Result */
+    .result-head { display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+    .gauge { position: relative; width: 132px; height: 132px; flex: 0 0 auto; }
+    .gauge svg { transform: rotate(-90deg); }
+    .gauge .val { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .gauge .num { font-size: 34px; font-weight: 800; }
+    .gauge .den { font-size: 11px; color: var(--muted); }
+    .head-meta { flex: 1; min-width: 260px; }
+    .head-meta .fname { font-size: 18px; font-weight: 700; word-break: break-all; }
+    .head-meta .hash { font-size: 11px; color: var(--muted); word-break: break-all; margin-top: 4px; }
+    .badges { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .pill { padding: 6px 13px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid var(--border); }
+    .pill.band { color: #fff; }
+    .pill.cls { background: var(--panel2); color: var(--accent); border-color: var(--accent); }
+    .pill.action { color: #0d1117; }
+
+    section.block { margin-top: 26px; }
+    section.block > h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 14px; }
+    .card .sig { font-weight: 700; font-size: 15px; }
+    .card .row { margin-top: 8px; font-size: 13px; line-height: 1.5; }
+    .card .row b { color: var(--muted); font-weight: 600; }
+    .conf { font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px; border: 1px solid var(--border); color: var(--muted); }
+    .conf.high { color: var(--critical); border-color: var(--critical); }
+    .conf.medium { color: var(--medium); border-color: var(--medium); }
+    .conf.low { color: var(--muted); }
+
+    .timeline .tl-item { display: flex; gap: 14px; align-items: flex-start; padding: 12px 0; border-bottom: 1px dashed var(--border); }
+    .tl-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--critical); margin-top: 5px; flex: 0 0 auto; }
+    .tag { display: inline-block; background: #2d1417; color: #ffb4ae; border: 1px solid var(--critical); border-radius: 6px; padding: 2px 8px; font-size: 11px; margin: 3px 5px 0 0; }
+    .tag.cdn { background: var(--panel2); color: var(--muted); border-color: var(--border); }
+
+    .evasion { background: #2a210d; border: 1px solid var(--medium); color: #f0d28a; padding: 16px; border-radius: 12px; margin-top: 14px; }
+
+    pre.report { background: #0a0d12; border: 1px solid var(--border); border-radius: 12px; padding: 18px; max-height: 460px; overflow: auto; white-space: pre-wrap; font-size: 12.5px; line-height: 1.55; color: #cdd9e5; }
+    .report-actions { display: flex; gap: 10px; margin-top: 12px; }
+    .btn { background: var(--accent); color: #0d1117; border: none; padding: 9px 16px; border-radius: 7px; font: inherit; font-weight: 700; cursor: pointer; }
+    .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+
+    table.hist { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    table.hist th, table.hist td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    table.hist th { color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+    table.hist tr.click { cursor: pointer; }
+    table.hist tr.click:hover td { background: var(--panel2); }
+    .muted { color: var(--muted); }
+    .center { text-align: center; padding: 40px; color: var(--muted); }
+    .llm-warn { background: #2a210d; border: 1px solid var(--medium); color: #f0d28a; padding: 10px 14px; border-radius: 10px; margin-top: 14px; font-size: 12.5px; }
+
+    /* Two-score layout */
+    .scores { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+    .score-card { flex: 1; min-width: 240px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 22px; display: flex; align-items: center; gap: 20px; }
+    .score-card h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+    .score-card .sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .ai-tag { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--accent);
+      color: var(--accent); margin-left: 6px; vertical-align: middle; }
+    .bandchip { font-size: 30px; font-weight: 800; padding: 14px 22px; border-radius: 12px; border: 2px solid; }
+    .bandchip.na { font-size: 16px; font-weight: 700; color: var(--muted); border-color: var(--border); }
+    .verdict-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-top: 16px; }
+    .verdict-card .q { font-size: 13px; color: var(--muted); }
+    .verdict-card .reason { margin-top: 10px; font-size: 14px; line-height: 1.6; }
+
+    /* MITRE grid */
+    .mitre-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+    .mitre-cell { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .mitre-cell .tactic { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); font-weight: 700; }
+    .mitre-cell .tech { font-size: 12.5px; color: var(--text); margin-top: 6px; line-height: 1.5; }
+
+    .tag.beh { background: #11241f; color: var(--accent); border-color: var(--accent); }
+    .tag.gap { background: #2d1417; color: #ffb4ae; border-color: var(--critical); }
+    .card.reonly { border-color: var(--high); background: #241a12; }
+    .card.reonly .sig { color: var(--high); }
+    .verdict-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid; margin-left: 8px; }
+    .verdict-badge.malicious { color: var(--critical); border-color: var(--critical); }
+    .verdict-badge.suspicious { color: var(--high); border-color: var(--high); }
+    .verdict-badge.benign { color: var(--low); border-color: var(--low); }
+
+    /* ---- Network graph panel ---- */
+    .netgraph-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .netgraph-head .toggle {
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+      padding: 4px 12px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+    }
+    .netgraph-head .toggle:hover { color: var(--accent); border-color: var(--accent); }
+    .netgraph-wrap {
+      position: relative; margin-top: 14px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; min-height: 400px;
+    }
+    .netgraph-wrap svg { display: block; cursor: grab; }
+    .netgraph-wrap svg:active { cursor: grabbing; }
+    .netgraph-bar {
+      position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; z-index: 3;
+    }
+    .netgraph-bar button {
+      background: rgba(13,17,23,.8); color: var(--muted); border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 11px;
+    }
+    .netgraph-bar button:hover { color: var(--accent); border-color: var(--accent); }
+    .netgraph-legend {
+      position: absolute; bottom: 10px; left: 12px; display: flex; gap: 14px; flex-wrap: wrap;
+      font-size: 10.5px; color: var(--muted); z-index: 3; pointer-events: none;
+    }
+    .netgraph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .netgraph-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .netgraph-note { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+    .netgraph-tip {
+      position: absolute; pointer-events: none; z-index: 5; max-width: 280px;
+      background: #0a0d12; border: 1px solid var(--accent); border-radius: 8px;
+      padding: 9px 11px; font-size: 11.5px; line-height: 1.45; color: var(--text);
+      box-shadow: 0 6px 22px rgba(0,0,0,.5); opacity: 0; transition: opacity .1s;
+    }
+    .netgraph-tip .t-label { font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .netgraph-tip .t-row { color: var(--muted); }
+    .netgraph-tip .t-row b { color: var(--text); font-weight: 600; }
+    .netgraph-empty { color: var(--muted); text-align: center; padding: 60px 20px; }
+    /* D3-managed SVG node/label classes */
+    .nn-label { font-size: 10.5px; fill: var(--text); pointer-events: none; }
+    .nn-elabel { font-size: 9px; fill: var(--muted); pointer-events: none; }
+    .nn-node { cursor: pointer; }
+    .nn-node.dim, .nn-link.dim, .nn-label.dim, .nn-elabel.dim { opacity: .12; }
+    /* brief pulse when a finding card is targeted by a graph click */
+    @keyframes findingFlash {
+      0%   { box-shadow: 0 0 0 0 var(--accent); border-color: var(--accent); }
+      100% { box-shadow: 0 0 0 8px rgba(0,212,170,0); }
+    }
+    .card.flash { animation: findingFlash 1.1s ease-out; border-color: var(--accent); }
+
+    /* ---- Impersonation (intent spoofing) alert ---- */
+    .imp-banner {
+      margin: 16px 0 0; border-radius: 14px; padding: 20px 24px;
+      background: linear-gradient(180deg, #2d1417, #1f0e10);
+      border: 2px solid var(--critical); box-shadow: 0 0 0 1px var(--critical) inset, 0 8px 30px rgba(248,81,73,.18);
+      animation: impPulse 1.4s ease-out;
+    }
+    @keyframes impPulse { 0% { box-shadow: 0 0 0 0 rgba(248,81,73,.6); } 100% { box-shadow: 0 0 0 14px rgba(248,81,73,0); } }
+    .imp-banner .imp-title { font-size: 18px; font-weight: 800; color: var(--critical); letter-spacing: .5px; }
+    .imp-banner .imp-sub { font-size: 14px; margin-top: 6px; color: var(--text); }
+    .imp-banner .imp-grid { margin-top: 12px; font-size: 13px; line-height: 1.7; }
+    .imp-banner .imp-grid .k { color: var(--muted); display: inline-block; min-width: 130px; }
+    .imp-banner .imp-grid .mismatch { color: var(--critical); font-weight: 700; }
+    .imp-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; padding: 12px 16px; }
+    .imp-clean { border-color: var(--low); }
+    .imp-status .imp-ok { color: var(--low); font-weight: 700; }
+
+    /* ---- Malware DNA panel ---- */
+    .dna-headline { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .dna-pct { font-size: 34px; font-weight: 800; line-height: 1; }
+    .dna-fam { font-size: 17px; font-weight: 700; }
+    .dna-sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .dna-clone { margin-top: 12px; background: #2d1417; border: 1px solid var(--critical);
+      color: #ffb4ae; padding: 10px 13px; border-radius: 10px; font-size: 13px; }
+    .dna-bars { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .dna-bar-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .dna-bar-row .fam { width: 92px; color: var(--muted); text-transform: capitalize; }
+    .dna-bar-track { flex: 1; height: 9px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
+    .dna-bar-fill { height: 100%; border-radius: 6px; }
+    .dna-bar-row .val { width: 42px; text-align: right; color: var(--text); }
+
+    /* ---- Fraud campaign panel ---- */
+    .camp-card { border-color: var(--high); background: #241a12; }
+    .camp-head { font-weight: 700; font-size: 15px; color: var(--high); }
+    .camp-head b { color: var(--text); }
+    .camp-links { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .camp-link { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+      padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+    .camp-link code { color: var(--accent); font-size: 12.5px; word-break: break-all; }
+    .camp-why { color: var(--muted); font-size: 11.5px; }
+    .camp-why .r { color: #f0d28a; }
+
+    /* ---- ML classifier panel (prototype) ---- */
+    .ml-proto { background: #1b2233; border: 1px dashed var(--accent); color: var(--accent);
+      font-size: 11.5px; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; }
+    .ml-rows { display: flex; flex-direction: column; gap: 7px; }
+    .ml-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .ml-row .lbl { width: 150px; text-transform: capitalize; }
+    .ml-row.hit .lbl { color: var(--text); font-weight: 700; }
+    .ml-row .lbl .star { color: var(--high); margin-left: 4px; }
+    .ml-track { flex: 1; height: 9px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
+    .ml-fill { height: 100%; border-radius: 6px; }
+    .ml-row .pv { width: 46px; text-align: right; color: var(--text); }
+
+    /* ---- Final GenAI report (rendered Markdown) ---- */
+    .report-md { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px 24px; line-height: 1.62; font-size: 13.5px; color: var(--text); }
+    .report-md h1, .report-md h2, .report-md h3 { color: var(--accent); margin: 18px 0 8px; line-height: 1.3; }
+    .report-md h1 { font-size: 18px; } .report-md h2 { font-size: 15px; }
+    .report-md h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+    .report-md > :first-child { margin-top: 0; }
+    .report-md p { margin: 8px 0; }
+    .report-md ul, .report-md ol { padding-left: 22px; margin: 8px 0; }
+    .report-md li { margin: 4px 0; }
+    .report-md strong { color: #fff; }
+    .report-md code { background: #0a0d12; padding: 1px 6px; border-radius: 4px; color: var(--accent); font-size: 12px; }
+    .report-md table { border-collapse: collapse; margin: 10px 0; width: 100%; }
+    .report-md th, .report-md td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; font-size: 12.5px; }
+    .report-md th { color: var(--muted); }
+    .report-md blockquote { border-left: 3px solid var(--accent); margin: 8px 0; padding: 2px 14px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useRef, useEffect, useCallback } = React;
+
+    const API = "http://localhost:8001";
+
+    // Ordered pipeline stages → labels, used to drive the progress bar.
+    // Two-score flow: static → dynamic → feature score → reverse engineering → score analysis.
+    const STAGES = [
+      ["mobsf_static", "Static analysis"],
+      ["mobsf_dynamic", "Dynamic analysis"],
+      ["intent_spoofing", "Intent spoofing check"],
+      ["feature_score", "Feature-store score"],
+      ["ml_classification", "ML threat classification"],
+      ["dna_fingerprinting", "DNA fingerprinting"],
+      ["campaign_clustering", "Campaign clustering"],
+      ["reverse_engineering", "Reverse engineering"],
+      ["analysis_of_scores", "Score analysis"],
+      ["report_generation", "Final report"],
+      ["done", "Done"],
+    ];
+
+    const BAND_COLOR = { Low: "var(--low)", Medium: "var(--medium)", High: "var(--high)", Critical: "var(--critical)" };
+    const ACTION_COLOR = { block: "var(--critical)", escalate_manual_review: "var(--high)", monitor: "var(--medium)", clear: "var(--low)" };
+
+    // ----- Risk gauge (circular) ----- //
+    function Gauge({ score, band }) {
+      const r = 56, c = 2 * Math.PI * r;
+      const pct = Math.max(0, Math.min(100, score)) / 100;
+      const color = BAND_COLOR[band] || "var(--muted)";
+      return (
+        <div className="gauge">
+          <svg width="132" height="132">
+            <circle cx="66" cy="66" r={r} fill="none" stroke="var(--panel2)" strokeWidth="12" />
+            <circle cx="66" cy="66" r={r} fill="none" stroke={color} strokeWidth="12"
+              strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} />
+          </svg>
+          <div className="val">
+            <div className="num" style={{ color }}>{score}</div>
+            <div className="den">/ 100</div>
+          </div>
+        </div>
+      );
+    }
+
+    // ----- View 1: Upload + live progress ----- //
+    function UploadView({ onDone }) {
+      const [hot, setHot] = useState(false);
+      const [running, setRunning] = useState(false);
+      const [stageIdx, setStageIdx] = useState(-1);
+      const [doneStages, setDoneStages] = useState({});
+      const [error, setError] = useState(null);
+      const inputRef = useRef();
+
+      const startAnalysis = useCallback(async (file) => {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".apk")) { setError("Please select an .apk file."); return; }
+        setError(null); setRunning(true); setStageIdx(0); setDoneStages({});
+        try {
+          const fd = new FormData();
+          fd.append("apk", file);
+          const r = await fetch(API + "/analyze", { method: "POST", body: fd });
+          if (!r.ok) {
+            const j = await r.json().catch(() => ({}));
+            throw new Error(j.detail || ("Upload failed (" + r.status + ")"));
+          }
+          const { job_id } = await r.json();
+          const es = new EventSource(API + "/progress/" + job_id);
+          es.onmessage = (ev) => {
+            let data; try { data = JSON.parse(ev.data); } catch { return; }
+            const idx = STAGES.findIndex(s => s[0] === data.stage);
+            if (data.stage === "error") {
+              setError(data.detail || "Analysis failed."); setRunning(false); es.close(); return;
+            }
+            if (idx >= 0) {
+              setStageIdx(idx);
+              setDoneStages(prev => {
+                const next = { ...prev };
+                for (let i = 0; i < idx; i++) next[STAGES[i][0]] = true;
+                return next;
+              });
+            }
+            if (data.stage === "done") { es.close(); onDone(data.apk_hash); }
+          };
+          es.onerror = () => { /* connection blip; SSE auto-reconnects until done */ };
+        } catch (e) {
+          setError(e.message); setRunning(false);
+        }
+      }, [onDone]);
+
+      const pct = stageIdx < 0 ? 0 : Math.round(((stageIdx + (doneStages.done ? 1 : 0)) / (STAGES.length - 1)) * 100);
+
+      return (
+        <div>
+          {!running && (
+            <div className={"drop" + (hot ? " hot" : "")}
+              onClick={() => inputRef.current.click()}
+              onDragOver={e => { e.preventDefault(); setHot(true); }}
+              onDragLeave={() => setHot(false)}
+              onDrop={e => { e.preventDefault(); setHot(false); startAnalysis(e.dataTransfer.files[0]); }}>
+              <div className="icon">📦🛡️</div>
+              <h2>Drop an APK here to analyze</h2>
+              <p>or click to browse — static + dynamic + GenAI threat intelligence</p>
+              <input ref={inputRef} type="file" accept=".apk" style={{ display: "none" }}
+                onChange={e => startAnalysis(e.target.files[0])} />
+            </div>
+          )}
+
+          {running && (
+            <div className="progress-card">
+              <h2 style={{ marginTop: 0 }}>Analyzing…</h2>
+              <div className="bar"><div style={{ width: pct + "%" }} /></div>
+              <div className="stages">
+                {STAGES.filter(s => s[0] !== "done").map((s, i) => (
+                  <span key={s[0]} className={"stage" + (i === stageIdx ? " active" : (doneStages[s[0]] ? " done" : ""))}>
+                    {doneStages[s[0]] ? "✓ " : (i === stageIdx ? "▶ " : "")}{s[1]}
+                  </span>
+                ))}
+              </div>
+              <p className="muted" style={{ marginTop: 16, fontSize: 12 }}>
+                Dynamic analysis runs the app on an emulator and can take a few minutes.
+              </p>
+            </div>
+          )}
+
+          {error && <div className="errbox"><b>Error:</b> {error}</div>}
+          {!running && <div className="hint">Backend: {API} · MobSF expected on :8000 · run uvicorn with --workers 1</div>}
+        </div>
+      );
+    }
+
+    // ===================================================================== //
+    // Network graph — semantic view of the app's network/C2 surface.
+    // ===================================================================== //
+
+    // Palette (mirrors the CSS risk colours).
+    const NET_COLORS = {
+      apk: "#58a6ff",        // neutral blue
+      red: "#f85149",        // critical / C2 / OFAC
+      orange: "#db6d28",     // high / cleartext
+      darkred: "#a01a14",    // hidden C2
+    };
+
+    // Network-related capability ids, keyed by their canonical (lowercase) id as
+    // emitted by capabilities.py. We also match the UPPERCASE rule_id spelling so
+    // the function keeps working if the backend ever switches to a rule_id field.
+    // `kind` drives node colour; `label` is the human-readable hub name.
+    const NET_CAP_RULES = {
+      c2_sanctioned_infra: { kind: "c2",        color: NET_COLORS.red,     label: "C2 sanctioned infrastructure" },
+      hidden_c2:           { kind: "hidden",    color: NET_COLORS.darkred, label: "Hidden C2 channel" },
+      c2_hardcoded:        { kind: "c2",        color: NET_COLORS.red,     label: "Hardcoded C2 endpoint" },
+      cleartext_traffic:   { kind: "cleartext", color: NET_COLORS.orange,  label: "Cleartext HTTP traffic" },
+      hidden_network:      { kind: "hidden",    color: NET_COLORS.darkred, label: "Hidden network activity" },
+    };
+    // Code-confirmed behaviour tags that imply a network hub of their own.
+    const NET_BEHAVIOUR_TAGS = {
+      c2_web:        { kind: "c2",        color: NET_COLORS.red,    label: "C2 over web (code-confirmed)", mitre: "T1437.001" },
+      cleartext_http:{ kind: "cleartext", color: NET_COLORS.orange, label: "Cleartext HTTP (code-confirmed)", mitre: "T1437" },
+    };
+
+    // Parse a MobSF evidence string ("static_ofac_domains=2, dyn_bad_domains=1")
+    // into a {feature: number} map so we can read the stored counts.
+    function parseEvidence(ev) {
+      const out = {};
+      const re = /([a-zA-Z_][\w]*)\s*=\s*(-?[0-9]*\.?[0-9]+)/g;
+      let m;
+      while ((m = re.exec(String(ev || ""))) !== null) out[m[1]] = Number(m[2]);
+      return out;
+    }
+    const evNum = (ev, ...keys) => keys.reduce((s, k) => s + (ev[k] || 0), 0);
+
+    /**
+     * buildNetworkGraph(result) -> { nodes, links }   [PURE — no side effects]
+     *
+     * Constructs a directed graph: APK (centre) -> capability hubs (fired
+     * network rules + code-confirmed network behaviour tags) -> inferred
+     * endpoint nodes. Because the result JSON stores only COUNTS/flags (not the
+     * raw domain list), endpoint nodes are SEMANTIC ("2 OFAC-listed domains",
+     * "3 cleartext HTTP endpoints", "C2 server (SMS exfil)") derived from the
+     * evidence strings, mitre_map and re_findings.
+     *
+     * Schema note: real fired_rules carry { capability, weight, evidence, mitre }
+     * with lowercase capability ids. We normalise against both that shape and a
+     * hypothetical { rule_id, signal } shape so the function is forward-compatible.
+     */
+    function buildNetworkGraph(result) {
+      const nodes = [];
+      const links = [];
+      const nodeById = new Map();
+      const addNode = (n) => { if (!nodeById.has(n.id)) { nodeById.set(n.id, n); nodes.push(n); } return nodeById.get(n.id); };
+      const addLink = (source, target, color, mitre) => links.push({ source, target, color, mitre: mitre || "" });
+
+      // --- APK node (pinned centre) ---------------------------------------- //
+      const apkLabel = result.package_name || result.apk_filename || "APK";
+      addNode({ id: "apk", type: "apk", label: apkLabel, color: NET_COLORS.apk,
+                evidence: result.apk_filename || "", mitre: "" });
+
+      const fired = result.fired_rules || [];
+      const catalog = result.behaviour_catalog || [];
+      const findings = result.re_findings || [];
+
+      // Helper: pull a MITRE label for a capability. Prefer the fired rule's own
+      // `mitre` field (real schema); fall back to scanning mitre_map values.
+      const mitreFromMap = (token) => {
+        if (!token) return "";
+        const map = result.mitre_map || {};
+        for (const techs of Object.values(map)) {
+          for (const t of (techs || [])) if (t.includes(token)) return t;
+        }
+        return "";
+      };
+
+      // --- Capability hubs from fired network rules ------------------------ //
+      fired.forEach((fr) => {
+        const rawId = fr.capability || fr.rule_id || "";
+        const key = String(rawId).toLowerCase();
+        const cfg = NET_CAP_RULES[key];
+        if (!cfg) return;                     // not a network capability — skip
+        const ev = parseEvidence(fr.evidence);
+        const capNodeId = "cap:" + key;
+        const mitre = fr.mitre || mitreFromMap(key === "c2_sanctioned_infra" ? "T1437" : "");
+        addNode({ id: capNodeId, type: "capability", kind: cfg.kind, color: cfg.color,
+                  label: fr.signal || cfg.label, evidence: fr.evidence || "", mitre });
+        addLink("apk", capNodeId, cfg.color, mitre ? mitre.split(" ")[0] : "");
+
+        // ---- Inferred endpoint nodes from the stored counts -------------- //
+        // ==================================================================
+        // PLUG-IN POINT: when the result payload starts carrying the RAW
+        // domain/URL lists (e.g. result.network_endpoints = [{host, type}...]),
+        // replace/augment the semantic endpoints below with one node per real
+        // host. Everything downstream (links, styling, tooltips) already keys
+        // off node.color/shape, so only this block needs to change.
+        // ==================================================================
+        if (cfg.kind === "c2") {
+          const ofac = evNum(ev, "static_ofac_domains", "dyn_ofac_domains");
+          const bad = evNum(ev, "static_bad_domains", "dyn_bad_domains");
+          if (ofac > 0) {
+            const id = "ep:ofac";
+            addNode({ id, type: "endpoint", color: NET_COLORS.red, dashed: true,
+                      label: ofac + " OFAC-listed domain" + (ofac > 1 ? "s" : ""),
+                      evidence: fr.evidence || "", mitre });
+            addLink(capNodeId, id, NET_COLORS.red);
+          }
+          if (bad > 0) {
+            const id = "ep:bad";
+            addNode({ id, type: "endpoint", color: NET_COLORS.red, dashed: true,
+                      label: bad + " flagged bad domain" + (bad > 1 ? "s" : ""),
+                      evidence: fr.evidence || "", mitre });
+            addLink(capNodeId, id, NET_COLORS.red);
+          }
+          if (ofac === 0 && bad === 0) {
+            const id = "ep:c2:" + key;
+            addNode({ id, type: "endpoint", color: NET_COLORS.red,
+                      label: "C2 server (inferred)", evidence: fr.evidence || "", mitre });
+            addLink(capNodeId, id, NET_COLORS.red);
+          }
+        } else if (cfg.kind === "cleartext") {
+          const http = evNum(ev, "static_http_count");
+          const id = "ep:cleartext";
+          addNode({ id, type: "endpoint", color: NET_COLORS.orange,
+                    label: (http > 0 ? http + " cleartext HTTP endpoint" + (http > 1 ? "s" : "")
+                                     : "Cleartext HTTP endpoint"),
+                    evidence: fr.evidence || "", mitre });
+          addLink(capNodeId, id, NET_COLORS.orange);
+        } else if (cfg.kind === "hidden") {
+          const delta = evNum(ev, "dyn_static_domain_delta");
+          const id = "ep:hidden:" + key;
+          addNode({ id, type: "endpoint", color: NET_COLORS.darkred, dashed: true,
+                    label: (delta > 0 ? delta + " hidden runtime domain" + (delta > 1 ? "s" : "")
+                                      : "Hidden C2 server"),
+                    evidence: fr.evidence || "", mitre });
+          addLink(capNodeId, id, NET_COLORS.darkred);
+        }
+      });
+
+      // --- Capability hubs from code-confirmed network behaviour tags ------ //
+      catalog.forEach((tag) => {
+        const cfg = NET_BEHAVIOUR_TAGS[tag];
+        if (!cfg) return;
+        const capNodeId = "cap:tag:" + tag;
+        addNode({ id: capNodeId, type: "capability", kind: cfg.kind, color: cfg.color,
+                  label: cfg.label, evidence: "code-confirmed behaviour tag: " + tag, mitre: cfg.mitre });
+        addLink("apk", capNodeId, cfg.color, cfg.mitre);
+      });
+
+      // --- Endpoint nodes inferred from RE findings tagged c2_web ---------- //
+      // These are the richest: the LLM described what the code does, so we can
+      // label the endpoint with that ("C2 server (SMS exfil)") and wire a click
+      // back to the originating finding card.
+      const ensureC2WebHub = () => {
+        const id = "cap:tag:c2_web";
+        if (!nodeById.has(id)) {
+          addNode({ id, type: "capability", kind: "c2", color: NET_COLORS.red,
+                    label: NET_BEHAVIOUR_TAGS.c2_web.label,
+                    evidence: "inferred from reverse-engineering findings", mitre: "T1437.001" });
+          addLink("apk", id, NET_COLORS.red, "T1437.001");
+        }
+        return id;
+      };
+      findings.forEach((f, i) => {
+        const tags = f.behaviour_tags || [];
+        if (!tags.includes("c2_web")) return;
+        const verdict = (f.verdict || "").toLowerCase();
+        if (verdict !== "malicious" && verdict !== "suspicious") return;
+        const color = verdict === "malicious" ? NET_COLORS.red : NET_COLORS.orange;
+        const hubId = ensureC2WebHub();
+        const id = "ep:finding:" + i;
+        const shortClass = (f.class_name || "").split(".").pop() || "endpoint";
+        addNode({ id, type: "endpoint", color, findingIndex: i,
+                  label: "C2 server — " + shortClass + "." + (f.method || ""),
+                  evidence: f.what_it_does || "", mitre: f.mitre_technique || "" });
+        addLink(hubId, id, color);
+      });
+
+      return { nodes, links };
+    }
+
+    // ----- Force-directed network graph (D3 owns the SVG DOM) ----- //
+    function NetworkGraph({ result }) {
+      const graph = React.useMemo(() => buildNetworkGraph(result), [result]);
+      const hasNetwork = graph.nodes.some(n => n.type === "capability");
+
+      const svgRef = useRef(null);
+      const wrapRef = useRef(null);
+      const tipRef = useRef(null);
+      const resetRef = useRef(null);
+      const zoomResetRef = useRef(null);
+      const [collapsed, setCollapsed] = useState(
+        typeof window !== "undefined" && window.innerWidth < 768);
+      const [width, setWidth] = useState(900);
+
+      // Track container width for a responsive, centred simulation.
+      useEffect(() => {
+        const measure = () => { if (wrapRef.current) setWidth(wrapRef.current.clientWidth || 900); };
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+      }, [collapsed, hasNetwork]);
+
+      // Scroll to + briefly flash the finding card a clicked endpoint maps to.
+      const flashFinding = useCallback((idx) => {
+        const el = document.getElementById("finding-" + idx);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.remove("flash");
+        void el.offsetWidth;             // restart the CSS animation
+        el.classList.add("flash");
+        setTimeout(() => el.classList.remove("flash"), 1200);
+      }, []);
+
+      // ---- All D3 work happens here; React only owns the <svg> container. -- //
+      useEffect(() => {
+        if (collapsed || !hasNetwork || !svgRef.current) return;
+        const height = 420;
+        const svg = d3.select(svgRef.current);
+        svg.selectAll("*").remove();      // clear before redraw (no stacking)
+        svg.attr("viewBox", `0 0 ${width} ${height}`);
+
+        // Deep-copy so D3's mutations (x/y/vx/vy) don't touch the memoised graph.
+        const nodes = graph.nodes.map(d => ({ ...d }));
+        const links = graph.links.map(d => ({ ...d }));
+
+        const root = svg.append("g");     // zoom/pan target
+        const zoom = d3.zoom().scaleExtent([0.4, 3])
+          .on("zoom", (ev) => root.attr("transform", ev.transform));
+        svg.call(zoom);
+        zoomResetRef.current = () => svg.transition().duration(300)
+          .call(zoom.transform, d3.zoomIdentity);
+
+        // Pin the APK node at centre.
+        const apk = nodes.find(n => n.type === "apk");
+        if (apk) { apk.fx = width / 2; apk.fy = height / 2; }
+
+        const sim = d3.forceSimulation(nodes)
+          .force("link", d3.forceLink(links).id(d => d.id)
+            .distance(l => (l.source.type === "apk" || l.target.type === "apk") ? 120 : 80)
+            .strength(0.6))
+          .force("charge", d3.forceManyBody().strength(-300))
+          .force("center", d3.forceCenter(width / 2, height / 2))
+          .force("collide", d3.forceCollide(34));
+
+        // ---- Links ---- //
+        const link = root.append("g").selectAll("line").data(links).join("line")
+          .attr("class", "nn-link")
+          .attr("stroke", d => d.color)
+          .attr("stroke-width", 1.6)
+          .attr("stroke-opacity", 0.55)
+          .attr("stroke-dasharray", d => (d.target.dashed ? "5 4" : null));
+
+        // ---- Edge (MITRE) labels ---- //
+        const elabel = root.append("g").selectAll("text").data(links.filter(l => l.mitre))
+          .join("text").attr("class", "nn-elabel").attr("text-anchor", "middle").text(d => d.mitre);
+
+        // ---- Nodes (a <g> per node, shape + label inside) ---- //
+        const node = root.append("g").selectAll("g").data(nodes).join("g")
+          .attr("class", "nn-node")
+          .call(d3.drag()
+            .on("start", (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+            .on("drag", (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+            .on("end", (ev, d) => { if (!ev.active) sim.alphaTarget(0); if (d.type !== "apk") { d.fx = null; d.fy = null; } }));
+
+        // Shapes by node type.
+        node.each(function (d) {
+          const g = d3.select(this);
+          if (d.type === "apk") {
+            // Hexagon.
+            const r = 26;
+            const pts = d3.range(6).map(i => {
+              const a = Math.PI / 6 + i * Math.PI / 3;
+              return [Math.cos(a) * r, Math.sin(a) * r].join(",");
+            }).join(" ");
+            g.append("polygon").attr("points", pts)
+              .attr("fill", "#1c2330").attr("stroke", d.color).attr("stroke-width", 2.5);
+          } else if (d.type === "capability") {
+            g.append("circle").attr("r", 16)
+              .attr("fill", "#161b22").attr("stroke", d.color).attr("stroke-width", 2.5);
+          } else {
+            // Endpoint diamond.
+            const s = 13;
+            g.append("polygon").attr("points", `0,${-s} ${s},0 0,${s} ${-s},0`)
+              .attr("fill", "#161b22").attr("stroke", d.color).attr("stroke-width", 2)
+              .attr("stroke-dasharray", d.dashed ? "4 3" : null);
+          }
+        });
+
+        // Labels (below the shape).
+        node.append("text").attr("class", "nn-label").attr("text-anchor", "middle")
+          .attr("dy", d => (d.type === "apk" ? 40 : 27))
+          .text(d => d.label.length > 26 ? d.label.slice(0, 25) + "…" : d.label);
+
+        // ---- Tooltip ---- //
+        const tip = d3.select(tipRef.current);
+        const showTip = (ev, d) => {
+          const rect = wrapRef.current.getBoundingClientRect();
+          let html = `<div class="t-label">${d.label}</div>`;
+          if (d.evidence) html += `<div class="t-row"><b>Evidence:</b> ${d.evidence}</div>`;
+          if (d.mitre) html += `<div class="t-row"><b>MITRE:</b> ${d.mitre}</div>`;
+          if (d.type === "endpoint" && d.findingIndex != null)
+            html += `<div class="t-row">click → jump to finding #${d.findingIndex + 1}</div>`;
+          tip.html(html)
+            .style("left", (ev.clientX - rect.left + 14) + "px")
+            .style("top", (ev.clientY - rect.top + 14) + "px")
+            .style("opacity", 1);
+        };
+        const hideTip = () => tip.style("opacity", 0);
+
+        // ---- Highlight a capability's subgraph (dim the rest) ---- //
+        const adjacency = new Map();      // nodeId -> Set(connected nodeIds)
+        links.forEach(l => {
+          const s = l.source.id, t = l.target.id;
+          if (!adjacency.has(s)) adjacency.set(s, new Set());
+          if (!adjacency.has(t)) adjacency.set(t, new Set());
+          adjacency.get(s).add(t); adjacency.get(t).add(s);
+        });
+        const clearHighlight = () => {
+          node.classed("dim", false);
+          link.classed("dim", false);
+          node.selectAll("text").classed("dim", false);
+          elabel.classed("dim", false);
+        };
+        resetRef.current = clearHighlight;
+        const highlight = (d) => {
+          const keep = new Set([d.id, "apk", ...(adjacency.get(d.id) || [])]);
+          node.classed("dim", n => !keep.has(n.id));
+          node.selectAll("text").classed("dim", function () {
+            return !keep.has(d3.select(this.parentNode).datum().id);
+          });
+          link.classed("dim", l => !(keep.has(l.source.id) && keep.has(l.target.id)));
+          elabel.classed("dim", l => !(keep.has(l.source.id) && keep.has(l.target.id)));
+        };
+
+        node.on("mouseover", showTip).on("mousemove", showTip).on("mouseout", hideTip)
+          .on("click", (ev, d) => {
+            ev.stopPropagation();
+            if (d.type === "capability") highlight(d);
+            else if (d.type === "endpoint" && d.findingIndex != null) flashFinding(d.findingIndex);
+          });
+        svg.on("click", clearHighlight);  // click empty canvas → reset
+
+        // ---- Tick ---- //
+        sim.on("tick", () => {
+          link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+              .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+          elabel.attr("x", d => (d.source.x + d.target.x) / 2)
+                .attr("y", d => (d.source.y + d.target.y) / 2 - 3);
+          node.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        return () => sim.stop();
+      }, [graph, collapsed, width, hasNetwork, flashFinding]);
+
+      return (
+        <section className="block">
+          <div className="netgraph-head">
+            <h3 style={{ flex: 1, marginBottom: 0, borderBottom: "none" }}>Network &amp; C2 Surface</h3>
+            {hasNetwork && (
+              <button className="toggle" onClick={() => setCollapsed(c => !c)}>
+                {collapsed ? "▸ Show graph" : "▾ Hide graph"}
+              </button>
+            )}
+          </div>
+          {!hasNetwork ? (
+            <div className="card netgraph-empty">No network connections detected.</div>
+          ) : collapsed ? (
+            <div className="netgraph-note">Graph hidden. Tap “Show graph” to render the network surface.</div>
+          ) : (
+            <>
+              <div className="netgraph-wrap" ref={wrapRef}>
+                <div className="netgraph-bar">
+                  <button onClick={() => resetRef.current && resetRef.current()}>Reset highlight</button>
+                  <button onClick={() => zoomResetRef.current && zoomResetRef.current()}>Reset zoom</button>
+                </div>
+                <svg ref={svgRef} width="100%" height="420" />
+                <div className="netgraph-legend">
+                  <span><i style={{ background: NET_COLORS.apk }} />App</span>
+                  <span><i style={{ background: NET_COLORS.red }} />C2 / OFAC</span>
+                  <span><i style={{ background: NET_COLORS.darkred }} />Hidden C2</span>
+                  <span><i style={{ background: NET_COLORS.orange }} />Cleartext</span>
+                </div>
+                <div className="netgraph-tip" ref={tipRef} />
+              </div>
+              <div className="netgraph-note">
+                Endpoints are <b>semantic</b>, inferred from stored counts &amp; evidence — the raw
+                domain/URL list is not in the result payload. Hover a node for evidence; click a
+                capability to isolate its subgraph; click a C2 endpoint to jump to its finding.
+              </div>
+            </>
+          )}
+        </section>
+      );
+    }
+
+    // ----- Impersonation (intent spoofing) alert ----- //
+    // Detected -> prominent red banner. Otherwise a compact always-visible status
+    // (clean / whitelist-missing) so the check is never invisible. Only no-ops for
+    // older result JSONs that predate the impersonation block.
+    function ImpersonationAlert({ result }) {
+      const imp = result.impersonation;
+      if (!imp) return null;
+
+      if (imp.is_impersonation) {
+        return (
+          <div className="imp-banner">
+            <div className="imp-title">⚠ IMPERSONATION DETECTED</div>
+            <div className="imp-sub">This APK is impersonating <b>{imp.target_app}</b>
+              {imp.target_bank ? ` (${imp.target_bank})` : ""}</div>
+            <div className="imp-grid">
+              <div><span className="k">Genuine package:</span> {imp.genuine_package || "—"}</div>
+              <div><span className="k">This package:</span> {imp.actual_package || "—"}</div>
+              <div><span className="k">Certificate:</span>{" "}
+                <span className="mismatch">MISMATCH — not signed by {imp.target_bank || "the genuine bank"}</span></div>
+              <div><span className="k">Confidence:</span> Definitive</div>
+            </div>
+          </div>
+        );
+      }
+
+      // Whitelist missing / detector degraded -> neutral note.
+      if (imp.error) {
+        return (
+          <div className="card imp-status muted" style={{ marginTop: 16 }}>
+            🛡️ Intent-spoofing check unavailable — {imp.error}
+          </div>
+        );
+      }
+
+      // Clean -> compact green confirmation so the check is visible.
+      return (
+        <div className="card imp-status imp-clean" style={{ marginTop: 16 }}>
+          <span className="imp-ok">🛡️ Identity verified · no impersonation</span>
+          <span className="muted">{imp.verdict || "Not impersonating any known bank app."}</span>
+        </div>
+      );
+    }
+
+    // ----- Malware DNA panel (structural fingerprint similarity) ----- //
+    // No-ops when result.dna is absent (older JSON) or fingerprinting didn't run
+    // (numpy missing). Shows a "seed it" hint when the reference DB is empty.
+    function DNAPanel({ result }) {
+      const dna = result.dna;
+      if (!dna || !dna.fingerprinted) return null;
+      const bandColor = { strong: "var(--critical)", moderate: "var(--high)",
+                          weak: "var(--medium)", none: "var(--muted)" }[dna.band] || "var(--muted)";
+      const pct = Math.round((dna.top_similarity || 0) * 100);
+      const empty = (dna.reference_size || 0) === 0;
+      const perFamily = (dna.per_family || []).slice(0, 6);
+      return (
+        <section className="block">
+          <h3>Malware DNA — structural fingerprint</h3>
+          {empty ? (
+            <div className="card muted">
+              No reference fingerprints yet — run <code>seed_malwarebazaar.py</code> to populate
+              the malware-family database, then re-analyze.
+            </div>
+          ) : (
+            <div className="card">
+              <div className="dna-headline">
+                <span className="dna-pct" style={{ color: bandColor }}>{pct}%</span>
+                <span className="dna-fam" style={{ color: bandColor }}>
+                  {dna.band === "none" ? "closest: " : "match: "}{dna.top_family}
+                </span>
+              </div>
+              <div className="dna-sub">
+                {dna.band === "none"
+                  ? `Low structural similarity to any known family (closest is ${dna.top_family} at ${pct}%).`
+                  : `Structurally ${dna.band} match to the ${dna.top_family} family.`}
+                {" "}Compared against {dna.reference_size} labelled malware samples.
+              </div>
+
+              {dna.tlsh_clone && (
+                <div className="dna-clone">
+                  ⚠ <b>Byte-level clone</b> of a known <b>{dna.tlsh_nearest_family}</b> sample
+                  (DEX&nbsp;TLSH distance {dna.tlsh_distance}) — a repackage, not just a look-alike.
+                </div>
+              )}
+
+              {perFamily.length > 0 && (
+                <div className="dna-bars">
+                  {perFamily.map((f, i) => {
+                    const p = Math.round((f.similarity || 0) * 100);
+                    const c = i === 0 ? bandColor : "var(--muted)";
+                    return (
+                      <div className="dna-bar-row" key={f.family}>
+                        <span className="fam">{f.family}</span>
+                        <span className="dna-bar-track">
+                          <span className="dna-bar-fill" style={{ width: p + "%", background: c }} />
+                        </span>
+                        <span className="val">{p}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      );
+    }
+
+    // ----- Fraud campaign panel (analyzed-APK relationship cluster) ----- //
+    // Shows only when this APK is linked to >=1 other analyzed APK (a campaign of
+    // >=2). Singletons / absent / errors render nothing — the store is "empty of
+    // relationships" until a second related APK is analyzed.
+    function CampaignPanel({ result }) {
+      const c = result.campaign;
+      if (!c || c.error || !c.is_campaign) return null;
+      const links = c.links || [];
+      return (
+        <section className="block">
+          <h3>Fraud Campaign — linked APKs</h3>
+          <div className="card camp-card">
+            <div className="camp-head">
+              Part of <b>{c.campaign_id}</b> — {c.size} linked APK{c.size === 1 ? "" : "s"}
+            </div>
+            <div className="camp-links">
+              {links.map((e, i) => (
+                <div className="camp-link" key={i}>
+                  <code>{e.other_package || (e.other_hash || "").slice(0, 16)}</code>
+                  <span className="camp-why">
+                    {(e.reasons || []).map((r, j) => (
+                      <span key={j}><span className="r">{r}</span>{j < e.reasons.length - 1 ? " · " : ""}</span>
+                    ))}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+              {c.size} of {c.total_analyzed} analyzed APKs form this cluster — linked by shared
+              signing certificate, shared C2 domain, DEX byte-clone, or structural twin.
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ----- ML threat classifier panel (PROTOTYPE — synthetic-trained) ----- //
+    // Multi-label (7 categories). Standalone & experimental — clearly disclaimed
+    // and not part of the risk verdict. Hidden when the model didn't run.
+    function MLPanel({ result }) {
+      const ml = result.ml_classification;
+      if (!ml || !ml.available) return null;
+      const ranked = ml.ranked || [];
+      const barColor = (hit, p) => hit ? (p >= 0.66 ? "var(--critical)" : "var(--high)") : "var(--muted)";
+      return (
+        <section className="block">
+          <h3>ML Threat Classification</h3>
+          <div className="card">
+            <div className="ml-proto">
+              ⚗ Prototype — trained on <b>synthetic data</b>. Experimental signal, not a
+              production verdict; deliberately excluded from the risk score.
+            </div>
+            <div className="ml-rows">
+              {ranked.map((r) => {
+                const p = Math.round((r.probability || 0) * 100);
+                return (
+                  <div className={"ml-row" + (r.prediction ? " hit" : "")} key={r.label}>
+                    <span className="lbl">{(r.label || "").replace(/_/g, " ")}
+                      {r.prediction && <span className="star">●</span>}</span>
+                    <span className="ml-track">
+                      <span className="ml-fill" style={{ width: p + "%", background: barColor(r.prediction, r.probability) }} />
+                    </span>
+                    <span className="pv">{p}%</span>
+                  </div>
+                );
+              })}
+            </div>
+            {(ml.predicted || []).length > 0 && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                Predicted label{ml.predicted.length === 1 ? "" : "s"} (above threshold):{" "}
+                {ml.predicted.map(l => l.replace(/_/g, " ")).join(", ")}.
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    // ----- Final GenAI report (synthesises all components into Markdown) ----- //
+    function ReportPanel({ result }) {
+      const rep = result.report;
+      if (!rep) return null;                       // older JSON, predates the report
+      if (!rep.markdown) {
+        return (
+          <section className="block">
+            <h3>Threat Report</h3>
+            <div className="card muted">Report not generated{rep.error ? ` — ${rep.error}` : ""}.</div>
+          </section>
+        );
+      }
+      const html = (window.marked ? window.marked.parse(rep.markdown) : rep.markdown);
+      const copy = () => { try { navigator.clipboard.writeText(rep.markdown); } catch (e) {} };
+      const download = () => {
+        const blob = new Blob([rep.markdown], { type: "text/markdown" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = (result.apk_filename || result.apk_hash || "threat-report") + ".md";
+        a.click(); URL.revokeObjectURL(a.href);
+      };
+      return (
+        <section className="block">
+          <h3>Threat Report <span className="ai-tag">AI-generated</span></h3>
+          <div className="report-actions">
+            <button className="btn ghost" onClick={copy}>Copy Markdown</button>
+            <button className="btn ghost" onClick={download}>Download .md</button>
+          </div>
+          <div className="report-md" style={{ marginTop: 12 }}
+               dangerouslySetInnerHTML={{ __html: html }} />
+        </section>
+      );
+    }
+
+    // ----- View 2: Result (two scores + fused verdict) ----- //
+    function ResultView({ result, onBack }) {
+      // Feature-Store Score (deterministic). Fall back to the old `rule_score`/
+      // `risk_band` shape so previously-saved result JSONs still render.
+      const fsScore = result.fs_score != null ? result.fs_score : (result.rule_score || 0);
+      const fsBand = result.fs_band || result.risk_band || "Low";
+      // Code-Behaviour Score (LLM-derived → shown as a band; may be unavailable).
+      const codeBand = result.code_band || null;
+      const codeScore = result.code_score;
+      const reUnavailable = result.re_unavailable || codeBand == null;
+
+      const action = result.recommended_action ||
+        (result.classification_detail && result.classification_detail.recommended_action) ||
+        "escalate_manual_review";
+      const reasoning = result.reasoning ||
+        (result.classification_detail && result.classification_detail.reasoning) || "";
+
+      const mitre = result.mitre_map || {};
+      const mitreTactics = Object.keys(mitre);
+      const catalog = result.behaviour_catalog || [];
+      const findings = result.re_findings || [];
+      const gap = result.capability_gap || {};
+      const reOnly = gap.re_only || [];
+      const declaredOnly = gap.declared_only || [];
+      const fired = result.fired_rules || [];
+
+      return (
+        <div>
+          <button className="btn ghost" onClick={onBack}>← Analyze Another APK</button>
+
+          {/* Impersonation headline (red banner sits above the scores when definitive) */}
+          <ImpersonationAlert result={result} />
+
+          {/* Header: identity + fused verdict pills */}
+          <div className="result-head" style={{ marginTop: 16 }}>
+            <Gauge score={fsScore} band={fsBand} />
+            <div className="head-meta">
+              <div className="fname">{result.apk_filename || result.package_name || result.apk_hash}</div>
+              <div className="hash">SHA256: {result.apk_hash}</div>
+              <div className="badges">
+                <span className="pill band" style={{ background: BAND_COLOR[fsBand] }}>Feature-store: {fsBand}</span>
+                {result.quadrant && <span className="pill cls">{result.quadrant.replace(/_/g, " ")}</span>}
+                <span className="pill action" style={{ background: ACTION_COLOR[action] || "var(--muted)" }}>
+                  {action.replace(/_/g, " ")}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Two scores side by side */}
+          <div className="scores">
+            <div className="score-card">
+              <Gauge score={fsScore} band={fsBand} />
+              <div>
+                <h4>Feature-Store Score</h4>
+                <div style={{ fontSize: 13 }}>Deterministic · what the app <b>declares</b></div>
+                <div className="sub">{(result.declared_capabilities || []).length} declared capabilities · same input → same score</div>
+              </div>
+            </div>
+            <div className="score-card">
+              <div className={"bandchip" + (reUnavailable ? " na" : "")}
+                   style={reUnavailable ? {} : { color: BAND_COLOR[codeBand], borderColor: BAND_COLOR[codeBand] }}>
+                {reUnavailable ? "N/A" : codeBand}
+              </div>
+              <div>
+                <h4>Code-Behaviour Score<span className="ai-tag">AI-derived · indicative</span></h4>
+                <div style={{ fontSize: 13 }}>Reverse-engineered · what the code <b>does</b></div>
+                <div className="sub">
+                  {reUnavailable
+                    ? "Reverse engineering did not run — verdict from the Feature-Store Score alone."
+                    : `band shown (raw ${codeScore}) · ${catalog.length} behaviours confirmed in code`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Fused verdict / score analysis */}
+          {(reasoning || result.quadrant) && (
+            <div className="verdict-card">
+              <div className="q">SCORE ANALYSIS · quadrant: <b>{(result.quadrant || "—").replace(/_/g, " ")}</b>
+                {" · "}recommended action:{" "}
+                <span style={{ color: ACTION_COLOR[action] || "var(--muted)", fontWeight: 700 }}>
+                  {action.replace(/_/g, " ")}</span>
+              </div>
+              {reasoning && <div className="reason">{reasoning}</div>}
+            </div>
+          )}
+
+          {result.llm_error && (
+            <div className="llm-warn">⚠ Code-behaviour (LLM/jadx) layer degraded ({result.llm_error}).
+              The deterministic Feature-Store Score and its fired rules below are unaffected.</div>
+          )}
+
+          {/* Final GenAI report — synthesises every component (leads the evidence) */}
+          <ReportPanel result={result} />
+
+          {/* ML threat classification (prototype, synthetic-trained, standalone) */}
+          <MLPanel result={result} />
+
+          {/* Malware DNA — structural fingerprint similarity to known families */}
+          <DNAPanel result={result} />
+
+          {/* Fraud campaign — cluster of related analyzed APKs */}
+          <CampaignPanel result={result} />
+
+          {/* MITRE ATT&CK coverage (code-confirmed only) */}
+          <section className="block">
+            <h3>MITRE ATT&CK Coverage</h3>
+            {mitreTactics.length === 0 ? (
+              <div className="card muted">
+                {reUnavailable
+                  ? "MITRE unavailable — reverse engineering did not complete."
+                  : "No ATT&CK techniques confirmed in code."}
+              </div>
+            ) : (
+              <div className="mitre-grid">
+                {mitreTactics.map((tac) => (
+                  <div className="mitre-cell" key={tac}>
+                    <div className="tactic">{tac}</div>
+                    {(mitre[tac] || []).map((t, j) => <div className="tech" key={j}>{t}</div>)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Network & C2 surface graph (D3 force-directed) */}
+          <NetworkGraph result={result} />
+
+          {/* Behaviour catalog (code-confirmed canonical tags) */}
+          {catalog.length > 0 && (
+            <section className="block">
+              <h3>Behaviour Catalog — confirmed in code</h3>
+              <div className="card">
+                {catalog.map((t, i) => <span className="tag beh" key={i}>{t}</span>)}
+              </div>
+            </section>
+          )}
+
+          {/* Capability gap: found in code but not declared (most interesting) */}
+          {(reOnly.length > 0 || declaredOnly.length > 0) && (
+            <section className="block">
+              <h3>Capability Gap</h3>
+              {reOnly.length > 0 && (
+                <div className="card reonly">
+                  <div className="sig">⚑ Found in code, NOT declared by features</div>
+                  <div className="row">These behaviours were confirmed by reverse engineering but no MobSF
+                    feature flagged them — the case the two-score design exists to surface.</div>
+                  <div className="row">{reOnly.map((c, i) => <span className="tag gap" key={i}>{c.replace(/_/g, " ")}</span>)}</div>
+                </div>
+              )}
+              {declaredOnly.length > 0 && (
+                <div className="card">
+                  <div className="sig muted">Declared by features, not confirmed in code (over-permissioned / latent)</div>
+                  <div className="row">{declaredOnly.map((c, i) => <span className="tag cdn" key={i}>{c.replace(/_/g, " ")}</span>)}</div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Reverse-engineering findings */}
+          {findings.length > 0 && (
+            <section className="block">
+              <h3>Reverse-Engineering Findings — {findings.length} methods</h3>
+              {findings.map((f, i) => (
+                <div className="card" key={i} id={`finding-${i}`}>
+                  <div className="sig">{f.class_name}.{f.method}
+                    <span className={"verdict-badge " + (f.verdict || "benign")}>{f.verdict}</span>
+                    <span className={"conf " + (f.confidence || "low")}>{f.confidence} confidence</span>
+                  </div>
+                  <div className="row"><b>What it does:</b> {f.what_it_does}</div>
+                  <div className="row"><b>Data accessed:</b> {f.data_accessed}</div>
+                  {f.behaviour_tags && f.behaviour_tags.length > 0 &&
+                    <div className="row">{f.behaviour_tags.map((t, j) => <span className="tag beh" key={j}>{t}</span>)}</div>}
+                  <div className="row muted"><b>Location:</b> {f.location} · <b>flagged:</b> {f.evidence}</div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* Feature-Store evidence (fired capabilities) */}
+          <section className="block">
+            <h3>Feature-Store Evidence — {fired.length} declared capabilities</h3>
+            {fired.length === 0 && <div className="card muted">No capability rules fired from the feature set.</div>}
+            {fired.map((r, i) => (
+              <div className="card" key={i}>
+                <div className="sig">{(r.capability || "").replace(/_/g, " ")}
+                  <span className="conf">weight {r.weight}</span>
+                </div>
+                {r.mitre && <div className="row"><b>MITRE:</b> {r.mitre}</div>}
+                <div className="row muted"><b>Evidence:</b> {r.evidence}</div>
+              </div>
+            ))}
+          </section>
+        </div>
+      );
+    }
+
+    // ----- View 3: History ----- //
+    function HistoryView({ onOpen }) {
+      const [rows, setRows] = useState(null);
+      const [err, setErr] = useState(null);
+      useEffect(() => {
+        fetch(API + "/analyses").then(r => r.json()).then(setRows).catch(e => setErr(e.message));
+      }, []);
+      if (err) return <div className="errbox">Could not load history: {err}</div>;
+      if (rows === null) return <div className="center">Loading history…</div>;
+      if (rows.length === 0) return <div className="center">No analyses yet. Upload an APK to get started.</div>;
+      return (
+        <table className="hist">
+          <thead><tr><th>Filename</th><th>FS Score</th><th>FS Band</th><th>Code Band</th><th>Action</th><th>Analyzed</th></tr></thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const fsScore = r.fs_score != null ? r.fs_score : r.risk_score;
+              const fsBand = r.fs_band || r.risk_band;
+              const action = r.recommended_action || "—";
+              return (
+                <tr className="click" key={i} onClick={() => onOpen(r.apk_hash)}>
+                  <td>{r.apk_filename || r.package_name || (r.apk_hash || "").slice(0, 12)}</td>
+                  <td style={{ color: BAND_COLOR[fsBand] }}>{fsScore != null ? fsScore : "—"}</td>
+                  <td>{fsBand ? <span className="pill band" style={{ background: BAND_COLOR[fsBand], padding: "3px 9px" }}>{fsBand}</span> : "—"}</td>
+                  <td style={{ color: BAND_COLOR[r.code_band] || "var(--muted)" }}>{r.code_band || "—"}</td>
+                  <td style={{ color: ACTION_COLOR[action] || "var(--muted)" }}>{action.replace(/_/g, " ")}</td>
+                  <td className="muted">{(r.analyzed_at || "").replace("T", " ").slice(0, 19)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      );
+    }
+
+    // ----- App shell ----- //
+    function App() {
+      const [view, setView] = useState("upload");   // upload | result | history
+      const [result, setResult] = useState(null);
+      const [loadErr, setLoadErr] = useState(null);
+
+      const loadResult = useCallback(async (hash) => {
+        setLoadErr(null);
+        try {
+          const r = await fetch(API + "/analyses/" + hash);
+          if (!r.ok) throw new Error("Result not found (" + r.status + ")");
+          const data = await r.json();
+          setResult(data); setView("result");
+          window.scrollTo(0, 0);
+        } catch (e) { setLoadErr(e.message); }
+      }, []);
+
+      return (
+        <div className="wrap">
+          <div className="topbar">
+            <div className="brand">APK<span className="dot">·</span>THREAT<span className="dot">·</span>INTEL</div>
+            <div className="nav">
+              <button className={view === "upload" ? "active" : ""} onClick={() => setView("upload")}>Analyze</button>
+              <button className={view === "history" ? "active" : ""} onClick={() => setView("history")}>History</button>
+            </div>
+          </div>
+
+          {loadErr && <div className="errbox">{loadErr}</div>}
+
+          {view === "upload" && <UploadView onDone={loadResult} />}
+          {view === "result" && result && <ResultView result={result} onBack={() => setView("upload")} />}
+          {view === "history" && <HistoryView onOpen={loadResult} />}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
