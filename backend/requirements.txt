@@ -1,0 +1,87 @@
+# =============================================================================
+# Dependencies for feature_store_pipeline.py
+#
+# Create and populate a virtual environment:
+#
+#     python3 -m venv .venv
+#     source .venv/bin/activate          # macOS / Linux
+#     pip install -r requirements.txt
+#
+# The pipeline itself is deliberately lightweight — everything beyond the two
+# packages below is the Python standard library (sqlite3, hashlib, json, csv,
+# math, argparse, ...).
+# =============================================================================
+
+# HTTP client used to call the MobSF REST API.
+requests==2.32.5
+
+# Loads configuration (MOBSF_API_KEY, emulator name, etc.) from the local .env.
+python-dotenv==1.1.0
+
+# -----------------------------------------------------------------------------
+# GenAI malware-analysis system (risk_scorer / campaign_store / llm_analyzer /
+# main.py). risk_scorer.py and campaign_store.py are pure standard library.
+# -----------------------------------------------------------------------------
+
+# FastAPI backend + ASGI server for main.py (run with: uvicorn main:app --workers 1).
+fastapi
+uvicorn[standard]
+
+# Multipart form parsing for the APK file upload (POST /analyze).
+python-multipart
+
+# Intent Spoofing Detector (build_whitelist.py / intent_spoof.py): NO extra
+# dependencies. It matches an unknown APK's package + signing-cert fingerprint
+# against bank_whitelist.json using only the standard library (re, difflib, json)
+# and MobSF's own static report — the app name comes from playstore_details.title.
+
+# APK DNA Fingerprinting (dna_fingerprint.py / seed_malwarebazaar.py).
+#   - numpy: fingerprint vectors (cosine similarity). Required for DNA; the live
+#     pipeline degrades gracefully (DNA stage skipped) if it is absent.
+#   - pyzipper: AES-encrypted-zip support for downloading MalwareBazaar samples
+#     (seed_malwarebazaar.py only).
+#   - py-tlsh: OPTIONAL — DEX-bytes TLSH for repackaged-clone detection. Imported
+#     lazily; the cosine layer works fine without it.
+numpy
+pyzipper
+py-tlsh
+
+# Prototype ML threat classifier (model/predict.py serving path). These are the
+# INFERENCE deps only — model.pkl references lightgbm/pandas/sklearn but NOT
+# shap/matplotlib (those are training-only, in model/train.py). The pipeline
+# degrades gracefully (ml_classification.available=False) if they're absent.
+pandas
+scikit-learn
+lightgbm
+
+# NOTE: the LLM layer (llm_analyzer.py) uses a LOCAL Ollama model (default
+# `gemma3`) over its REST API via the `requests` package already pinned above —
+# so there is NO extra Python dependency for the LLM. You just need the Ollama
+# runtime:
+#
+#     # install Ollama (https://ollama.com), then:
+#     ollama serve            # starts the API on http://localhost:11434
+#     ollama pull gemma3      # download the model (or `ollama pull phi` for a smaller one)
+#
+# Configure via .env: OLLAMA_URL (default http://localhost:11434),
+# OLLAMA_MODEL (default gemma3), OLLAMA_TIMEOUT (default 600s).
+
+
+# -----------------------------------------------------------------------------
+# NOTE: MobSF itself is NOT listed here on purpose.
+#
+# MobSF is a separate *server application*, not a library this pipeline imports.
+# Installing it into the same venv pulls in a very large, version-sensitive
+# dependency tree and is best kept isolated. Run MobSF one of these ways:
+#
+#   Docker (static analysis):
+#       docker run -it --rm -p 8000:8000 \
+#         opensecurity/mobile-security-framework-mobsf:latest
+#
+#   Native install in its OWN venv (needed for emulator/dynamic analysis):
+#       python3 -m venv .venv-mobsf && source .venv-mobsf/bin/activate
+#       pip install mobsf && mobsf
+#
+# Either way, MobSF ends up at http://localhost:8000; copy its API key into .env.
+# Your pipeline's .venv only needs the two packages above to talk to it.
+# -----------------------------------------------------------------------------
