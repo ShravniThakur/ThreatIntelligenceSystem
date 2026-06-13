@@ -34,7 +34,7 @@ the other two are external services the backend talks to over HTTP.
 |-------------|--------------|-----------------------------------------------------------------------|
 | Backend     | `backend/`   | FastAPI app (`main.py`) on **:8001** — orchestrates the analysis pipeline (single worker, in-memory job queue + SSE progress). |
 | Frontend    | `frontend/`  | Vite + React + Tailwind console on **:5173** (dev) / served by the backend in prod. |
-| MobSF       | external     | Mobile Security Framework on **:8000** — does the actual static & dynamic APK analysis. Run via Docker. |
+| MobSF       | external     | Mobile Security Framework on **:8000** — does the actual static & dynamic APK analysis. Cloned & installed locally (see step 3). |
 | Ollama      | external     | Local LLM runtime on **:11434** — powers the GenAI reverse-engineering / report layer. No API key, runs offline. |
 | ML model    | `backend/model/` | Prototype synthetic-trained classifier. Standalone — degrades gracefully if its deps are missing. |
 | Sample APKs | `BankAPKS/`  | Genuine bank APKs used for testing (gitignored — not in the repo, see below). |
@@ -47,7 +47,7 @@ Install these once on each machine:
 
 - **Python 3.11+** (developed on 3.13) — for the backend
 - **Node.js 18+** (developed on 22) + npm — for the frontend
-- **MobSF** — installed locally (this repo's `mobsf/`) or run via Docker
+- **MobSF** — cloned and installed locally (see step 3)
 - **[Ollama](https://ollama.com)** — local LLM runtime for the GenAI layer
 - **Android emulator** (Android SDK + an AVD) — **required for dynamic analysis**
 
@@ -78,21 +78,22 @@ cp .env.example .env               # then edit .env (see Configuration below)
 
 ### 3. MobSF (static + dynamic analysis engine)
 
-MobSF runs as its own server — it does **not** go in the backend venv. Leave it
-running in its own terminal.
-
-**Local install (needed for dynamic analysis):**
+MobSF runs as its own server — it does **not** go in the backend venv, and it is
+**not** committed to this repo. Clone and install it locally (a local install is
+required for dynamic analysis on the emulator).
 
 ```bash
-cd ~/Desktop/BankOfIndiaHackathon/mobsf
-./run.sh 127.0.0.1:8000
+# clone it next to the project (anywhere you like)
+git clone https://github.com/MobSF/Mobile-Security-Framework-MobSF.git mobsf
+cd mobsf
+./setup.sh                       # one-time install (creates its own venv)
 ```
 
-**Or Docker (static analysis only — no emulator support):**
+Then start it in its own terminal (leave it running):
 
 ```bash
-docker run -it --rm -p 8000:8000 \
-  opensecurity/mobile-security-framework-mobsf:latest
+cd mobsf
+./run.sh 127.0.0.1:8000
 ```
 
 Check it's up at <http://localhost:8000/>.
@@ -104,9 +105,6 @@ Check it's up at <http://localhost:8000/>.
 ```bash
 python3 -c "import hashlib; print(hashlib.sha256(open('$HOME/.MobSF/secret').read().encode()).hexdigest())"
 ```
-
-(For the Docker image, copy the **API Key** shown in the top-right of the MobSF
-web UI instead.)
 
 ### 3b. Android emulator (required for dynamic analysis)
 
@@ -232,7 +230,7 @@ The frontend reads `VITE_API_BASE` (build-time): unset → defaults to
 ├── frontend/                 Vite + React + Tailwind console (:5173)
 │   └── src/{pages,panels,components,lib}
 ├── BankAPKS/                 test APKs (gitignored)
-└── mobsf/                    MobSF install (gitignored — run via Docker)
+└── mobsf/                    MobSF install (gitignored — clone separately, see step 3)
 ```
 
 ---
