@@ -47,9 +47,9 @@ Install these once on each machine:
 
 - **Python 3.11+** (developed on 3.13) — for the backend
 - **Node.js 18+** (developed on 22) + npm — for the frontend
-- **Docker** — easiest way to run MobSF
+- **MobSF** — installed locally (this repo's `mobsf/`) or run via Docker
 - **[Ollama](https://ollama.com)** — local LLM runtime for the GenAI layer
-- *(optional)* **Android emulator / `adb`** — only if you want dynamic analysis
+- **Android emulator** (Android SDK + an AVD) — **required for dynamic analysis**
 
 ---
 
@@ -78,20 +78,48 @@ cp .env.example .env               # then edit .env (see Configuration below)
 
 ### 3. MobSF (static + dynamic analysis engine)
 
-Run MobSF in Docker — it does **not** go in the backend venv:
+MobSF runs as its own server — it does **not** go in the backend venv. Leave it
+running in its own terminal.
+
+**Local install (needed for dynamic analysis):**
+
+```bash
+cd ~/Desktop/BankOfIndiaHackathon/mobsf
+./run.sh 127.0.0.1:8000
+```
+
+**Or Docker (static analysis only — no emulator support):**
 
 ```bash
 docker run -it --rm -p 8000:8000 \
   opensecurity/mobile-security-framework-mobsf:latest
 ```
 
-Open <http://localhost:8000>, copy the **API Key** shown in the top-right of the
-UI, and paste it into `backend/.env` as `MOBSF_API_KEY`.
+Check it's up at <http://localhost:8000/>.
 
-> Dynamic analysis (running the APK on an emulator) needs a native MobSF install
-> with an Android emulator attached — see the
-> [MobSF docs](https://mobsf.github.io/docs/). Static analysis works fine with
-> just the Docker container above.
+**Sync the API key into `backend/.env`.** A local install derives the key from
+`~/.MobSF/secret`. Print the live key and make sure `MOBSF_API_KEY` in your
+`.env` matches it:
+
+```bash
+python3 -c "import hashlib; print(hashlib.sha256(open('$HOME/.MobSF/secret').read().encode()).hexdigest())"
+```
+
+(For the Docker image, copy the **API Key** shown in the top-right of the MobSF
+web UI instead.)
+
+### 3b. Android emulator (required for dynamic analysis)
+
+Dynamic analysis runs the APK on a live emulator, which must be launched with
+`-writable-system`. In its own terminal:
+
+```bash
+~/Library/Android/sdk/emulator/emulator -avd Pixel_6_API_30 -writable-system -no-snapshot
+```
+
+Replace `Pixel_6_API_30` with your AVD name (`emulator -list-avds`). The
+emulator id (default `emulator-5554`) must match `EMULATOR_NAME` /
+`MOBSF_ANALYZER_IDENTIFIER` in `.env`.
 
 ### 4. Ollama (local GenAI layer)
 
@@ -115,13 +143,14 @@ npm install                         # if the npm cache is root-owned: npm instal
 Start each service in its own terminal:
 
 ```bash
-# 1. MobSF       (Docker — step 3 above)
-# 2. Ollama      ollama serve
-# 3. Backend
+# 1. MobSF       cd mobsf && ./run.sh 127.0.0.1:8000   (step 3 above)
+# 2. Emulator    ~/Library/Android/sdk/emulator/emulator -avd Pixel_6_API_30 -writable-system -no-snapshot
+# 3. Ollama      ollama serve
+# 4. Backend
 cd backend && source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8001 --workers 1   # MUST be a single worker
 
-# 4. Frontend
+# 5. Frontend
 cd frontend && npm run dev          # http://localhost:5173
 ```
 
@@ -129,6 +158,22 @@ Then open <http://localhost:5173> and upload an APK.
 
 > ⚠️ The backend keeps job state in process memory, so it **must** run with
 > `--workers 1`. Don't scale it up.
+
+### Running the pipeline directly (CLI)
+
+You can also run the analysis pipeline without the web UI — useful for batch
+runs or debugging. With MobSF + the emulator up and the venv active:
+
+```bash
+cd backend
+source .venv/bin/activate
+
+# analyze one APK and save the full report under reports/
+python feature_store_pipeline.py samples/app-debug.apk --save-report
+
+# analyze and also export the extracted feature vector to CSV
+python feature_store_pipeline.py samples/your-app.apk --save-report --export features.csv
+```
 
 ### Production build (single-origin)
 
