@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-surface-app text-slate-900 font-sans antialiased;
+  }
+  /* Bold every grey/muted text color. Lives in @layer base so explicit
+     font-weight utilities (font-700/600 on headings etc.) still override it —
+     only otherwise-unweighted grey text gets bolded. */
+  .text-slate-400,
+  .text-slate-500,
+  .text-slate-600,
+  .text-slate-700 {
+    font-weight: 600;
+  }
+  /* Thin, professional scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #c7d0e0 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #c7d0e0;
+    border-radius: 8px;
+  }
+}
+
+@layer components {
+  /* Rendered GenAI markdown report */
+  .report-md {
+    @apply text-[15px] leading-[1.65] text-slate-700;
+  }
+  .report-md h1,
+  .report-md h2,
+  .report-md h3 {
+    @apply text-boi-navy font-700 mt-5 mb-2 leading-tight;
+  }
+  .report-md h1 {
+    @apply text-lg;
+  }
+  .report-md h2 {
+    @apply text-base;
+  }
+  .report-md h3 {
+    @apply text-xs uppercase tracking-wide;
+  }
+  .report-md > :first-child {
+    @apply mt-0;
+  }
+  .report-md p {
+    @apply my-2;
+  }
+  .report-md ul {
+    @apply list-disc pl-6 my-2;
+  }
+  .report-md ol {
+    @apply list-decimal pl-6 my-2;
+  }
+  .report-md li {
+    @apply my-1;
+  }
+  .report-md strong {
+    @apply text-slate-900 font-600;
+  }
+  .report-md code {
+    @apply bg-slate-100 text-boi-blue rounded px-1.5 py-0.5 text-[13.5px] font-mono;
+  }
+  .report-md table {
+    @apply border-collapse my-3 w-full;
+  }
+  .report-md th,
+  .report-md td {
+    @apply border border-slate-200 px-2.5 py-1.5 text-left text-[14px];
+  }
+  .report-md th {
+    @apply bg-slate-50 text-slate-500;
+  }
+  .report-md blockquote {
+    @apply border-l-4 border-boi-blue/40 pl-4 my-2 text-slate-500;
+  }
+
+  /* D3 network-graph SVG classes (D3 owns this DOM, so plain CSS not Tailwind) */
+  .nn-label {
+    font-size: 10.5px;
+    fill: #334155;
+    pointer-events: none;
+  }
+  .nn-elabel {
+    font-size: 9px;
+    fill: #94a3b8;
+    pointer-events: none;
+  }
+  .nn-node {
+    cursor: pointer;
+  }
+  .nn-node.dim,
+  .nn-link.dim,
+  .nn-label.dim,
+  .nn-elabel.dim {
+    opacity: 0.14;
+  }
+}
+
+/* font-weight helpers used above */
+.font-600 {
+  font-weight: 600;
+}
+.font-700 {
+  font-weight: 700;
+}
