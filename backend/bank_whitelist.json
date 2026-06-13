@@ -1,0 +1,92 @@
+[
+  {
+    "bank": "Axis Mobile: Pay, Invest & UPI",
+    "app_name": "Axis Mobile: Pay, Invest & UPI",
+    "package_name": "com.axis.mobile",
+    "cert_fingerprint": "ea40b45b42db0453b93390f21f45a442ceac10bf55d7bc124cdc3b045b7a5cfe",
+    "cert_cn": "AXIS BANK",
+    "icon_phash": "",
+    "apk_file": "Axis Mobile.apk",
+    "added_at": "2026-06-12T18:05:50"
+  },
+  {
+    "bank": "BOI Mobile",
+    "app_name": "BOI Mobile",
+    "package_name": "com.boi.ua.android",
+    "cert_fingerprint": "018672474e1b89cfcef70ffd3f96ef40c2502ec7564213a072b62d7aabb962f9",
+    "cert_cn": "Android",
+    "icon_phash": "",
+    "apk_file": "BOI Mobile.apk",
+    "added_at": "2026-06-12T18:05:51"
+  },
+  {
+    "bank": "Canara ai1- Mobile Banking App",
+    "app_name": "Canara ai1- Mobile Banking App",
+    "package_name": "com.canarabank.mobility",
+    "cert_fingerprint": "cfe8e60dacd95c0ff2886231ef485d039aa3fee3483d33154631aba27327015a",
+    "cert_cn": "Android",
+    "icon_phash": "",
+    "apk_file": "Canara ai1.apk",
+    "added_at": "2026-06-12T18:07:28"
+  },
+  {
+    "bank": "HDFC Bank App: Banking & Cards",
+    "app_name": "HDFC Bank App: Banking & Cards",
+    "package_name": "com.hdfcbank.android.now",
+    "cert_fingerprint": "3592a726ce955e3df3bd0b5953b487a874ba3c6a201b2666ac4f4f871cd650f3",
+    "cert_cn": "Android",
+    "icon_phash": "",
+    "apk_file": "HDFC Bank App.apk",
+    "added_at": "2026-06-12T18:11:09"
+  },
+  {
+    "bank": "IRIS by YES BANK - Mobile App",
+    "app_name": "IRIS by YES BANK - Mobile App",
+    "package_name": "in.irisbyyes.app",
+    "cert_fingerprint": "a054d56518f9a84f0af928b2ca8dd74211694069be15fa0ebc90707cb20c41c7",
+    "cert_cn": "Android",
+    "icon_phash": "",
+    "apk_file": "IRIS by YES BANK.apk",
+    "added_at": "2026-06-12T18:12:13"
+  },
+  {
+    "bank": "Kotak Bank: 811 Mobile App",
+    "app_name": "Kotak Bank: 811 Mobile App",
+    "package_name": "com.kotak811mobilebankingapp.instantsavingsupiscanandpayrecharge",
+    "cert_fingerprint": "2d3326a8a6efba13cc7f20f00fe3f0992ae0c7474eec846361cd0d902fd7c9f9",
+    "cert_cn": "Android",
+    "icon_phash": "",
+    "apk_file": "Kotak811.apk",
+    "added_at": "2026-06-12T18:14:19"
+  },
+  {
+    "bank": "PNB ONE",
+    "app_name": "PNB ONE",
+    "package_name": "com.Version1",
+    "cert_fingerprint": "cb31e6fd5e2a62d502e6b9be9c6f41d6314e5992a13a4bf8509ca0ffd0a046e0",
+    "cert_cn": "punjab national bank",
+    "icon_phash": "",
+    "apk_file": "PNB ONE.apk",
+    "added_at": "2026-06-12T18:18:47"
+  },
+  {
+    "bank": "Saraswat Bank Mobile Banking",
+    "app_name": "Saraswat Bank Mobile Banking",
+    "package_name": "com.saraswat.mobilebankingv2",
+    "cert_fingerprint": "d5964cf54dbda9223036096cd19bb9940aa3774a47b3a0b60a8217503f6174bd",
+    "cert_cn": "Amar Raut",
+    "icon_phash": "",
+    "apk_file": "Saraswat.apk",
+    "added_at": "2026-06-12T18:19:39"
+  },
+  {
+    "bank": "YONO SBI: Banking & Lifestyle",
+    "app_name": "YONO SBI: Banking & Lifestyle",
+    "package_name": "com.sbi.lotusintouch",
+    "cert_fingerprint": "435776891f2ca214e3ed167c42f60e47d96fa49e0c9ea76dbd9936fa54f15f42",
+    "cert_cn": "LOTUS",
+    "icon_phash": "",
+    "apk_file": "YONO SBI.apk",
+    "added_at": "2026-06-12T18:22:25"
+  }
+]
