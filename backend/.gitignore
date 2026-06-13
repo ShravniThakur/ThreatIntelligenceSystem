@@ -25,6 +25,8 @@ feature_store.sqlite-shm
 #     folders themselves (each has a .gitignore that excludes itself). ---
 #   samples/  — uploaded APKs (runtime input)
 #   reports/  — MobSF static/dynamic dumps + per-analysis result JSON
+reports/*
+samples/*
 
 # --- OS / editor cruft ---
 .DS_Store
