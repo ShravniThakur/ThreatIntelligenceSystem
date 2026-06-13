@@ -1,0 +1,4 @@
+# Ignore everything in samples/ (uploaded APKs land here at runtime) but keep
+# the folder itself tracked.
+*
+!.gitignore
