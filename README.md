@@ -2,10 +2,7 @@
 
 **AI-Powered Android Malware Analysis & Banking Trojan Detection Platform**
 
-A comprehensive malware analysis system that combines static & dynamic APK
-analysis, machine learning, malware DNA fingerprinting, intent-spoof detection,
-and GenAI-powered reverse engineering to detect Android malware, banking
-trojans, and fake banking applications.
+This is a GenAI-powered Android APK malware analysis backend, purpose-built for detecting Indian banking malware — overlay trojans, SMS stealers, remote-access droppers, OTP thieves, and fake bank apps. It runs as a FastAPI server and orchestrates a multi-stage pipeline combining deterministic rule-based scoring, LLM code analysis (via a local Ollama model), ML classification, and several standalone detection signals.
 
 ---
 
