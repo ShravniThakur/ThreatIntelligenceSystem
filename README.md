@@ -14,21 +14,8 @@ trojans, and fake banking applications.
 The system has four moving parts. The two you run yourself live in this repo;
 the other two are external services the backend talks to over HTTP.
 
-```
-                         ┌─────────────────────────────┐
-   Browser ── :5173 ──▶  │  frontend/  (Vite + React)  │
-                         └──────────────┬──────────────┘
-                                        │ HTTP + SSE
-                         ┌──────────────▼──────────────┐
-                         │  backend/   (FastAPI :8001) │
-                         │  scoring · fusion · GenAI   │
-                         └───────┬───────────────┬─────┘
-                                 │               │
-                    ┌────────────▼──────┐  ┌─────▼──────────────┐
-                    │ MobSF  (:8000)    │  │ Ollama  (:11434)   │
-                    │ static + dynamic  │  │ local LLM (gemma3) │
-                    └───────────────────┘  └────────────────────┘
-```
+<img width="1600" height="768" alt="image" src="https://github.com/user-attachments/assets/784bee17-f20c-4b7b-8b0a-145b9c6edfab" />
+
 
 | Component   | Path         | What it is                                                            |
 |-------------|--------------|-----------------------------------------------------------------------|
