@@ -1,4 +1,4 @@
-# ThreatIntelligenceSystem
+# APK Threat Intelligence System
 
 **AI-Powered Android Malware Analysis & Banking Trojan Detection Platform**
 
