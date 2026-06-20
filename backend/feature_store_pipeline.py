@@ -465,6 +465,24 @@ class MobSFClient:
         resp.raise_for_status()
         return resp.json()
 
+    # -- cleanup ------------------------------------------------------------- #
+
+    def delete_scan(self, scan_hash: str) -> bool:
+        """POST /api/v1/delete_scan — drop a scan's stored artifacts + DB row.
+
+        Best-effort: True on success, False on any failure (never raises). MobSF
+        keeps a full extracted/decompiled copy per scan (~100MB for a large APK);
+        once we've extracted features it's dead weight, so the bulk dataset
+        builders delete it to keep MobSF's on-disk footprint flat over a long run.
+        """
+        try:
+            resp = self._post("/api/v1/delete_scan", data={"hash": scan_hash})
+            resp.raise_for_status()
+            return True
+        except Exception as exc:  # noqa: BLE001 - cleanup must never crash a build
+            LOG.warning("MobSF delete_scan failed for hash=%s: %s", scan_hash, exc)
+            return False
+
 
 # --------------------------------------------------------------------------- #
 # Normalization helpers — absorb MobSF version drift
@@ -1200,6 +1218,7 @@ class FeatureStorePipeline:
         apk_path: str,
         run_dynamic: bool = True,
         report_dir: Optional[str] = None,
+        cleanup_scan: bool = False,
     ) -> FeatureVector:
         """Analyse one APK and persist its feature vector. Returns the vector.
 
@@ -1253,6 +1272,17 @@ class FeatureStorePipeline:
 
         # --- persist ------------------------------------------------------ #
         self.store.upsert(fv)
+
+        # --- optional MobSF artifact cleanup ------------------------------ #
+        # Bulk dataset builders set cleanup_scan=True: once the feature vector is
+        # stored, MobSF's per-scan extracted/decompiled copy is dead weight, so we
+        # delete it to keep MobSF's disk footprint flat over hundreds of scans.
+        # The live /analyze app leaves this off (default) so scans stay viewable.
+        if cleanup_scan:
+            scan_hash = static_report.get("_mobsf_hash")
+            if scan_hash:
+                self.client.delete_scan(scan_hash)
+
         return fv
 
     @staticmethod

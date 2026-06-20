@@ -59,13 +59,31 @@ try:
 except ImportError:
     pass
 
+# Which LLM backend to use: "ollama" (local, default) or "groq" (hosted OSS models,
+# OpenAI-compatible). Set LLM_PROVIDER=groq + GROQ_API_KEY in backend/.env to switch;
+# nothing else in the pipeline changes — all three LLM steps route through _generate().
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "600"))
 
+# Groq (OpenAI-compatible). Key is read from the environment — never hardcode it.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_URL = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1").rstrip("/")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_TIMEOUT = int(os.getenv("GROQ_TIMEOUT", "120"))
+
 
 def _ollama_available() -> bool:
-    """Best-effort reachability probe. Never raises."""
+    """Best-effort: is the active LLM backend usable? Never raises.
+
+    Kept under this name because social_engineer / report_generator import it as
+    the gate for whether the LLM steps run. For Groq, "available" means the API key
+    is configured; for Ollama, that the local server responds.
+    """
+    if LLM_PROVIDER == "groq":
+        return bool(GROQ_API_KEY)
     try:
         r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
         return r.status_code == 200
@@ -75,6 +93,18 @@ def _ollama_available() -> bool:
 
 def _generate(user_msg: str, system_prompt: str, max_output_tokens: int,
               json_mode: bool, num_ctx: Optional[int] = None) -> tuple[str, Optional[str]]:
+    """Run one chat completion against the active LLM backend. Returns (text, error).
+
+    Dispatches to Groq or Ollama based on ``LLM_PROVIDER``; never raises. ``num_ctx``
+    only applies to Ollama (Groq's context window is fixed per model).
+    """
+    if LLM_PROVIDER == "groq":
+        return _generate_groq(user_msg, system_prompt, max_output_tokens, json_mode)
+    return _generate_ollama(user_msg, system_prompt, max_output_tokens, json_mode, num_ctx)
+
+
+def _generate_ollama(user_msg: str, system_prompt: str, max_output_tokens: int,
+                     json_mode: bool, num_ctx: Optional[int] = None) -> tuple[str, Optional[str]]:
     """POST one chat completion to Ollama. Returns (text, error); never raises.
 
     ``num_ctx`` (when set) widens the model context window so a long prompt plus a
@@ -111,6 +141,51 @@ def _generate(user_msg: str, system_prompt: str, max_output_tokens: int,
         return "", f"Ollama HTTP error: {exc}"
     except Exception as exc:  # noqa: BLE001
         return "", f"Ollama error: {exc}"
+
+
+def _generate_groq(user_msg: str, system_prompt: str, max_output_tokens: int,
+                   json_mode: bool) -> tuple[str, Optional[str]]:
+    """POST one chat completion to Groq's OpenAI-compatible API. Never raises.
+
+    Groq's JSON mode (``response_format={"type":"json_object"}``) requires the word
+    "json" to appear in the prompt — the RE/SE system prompts already say "return a
+    JSON object", so json_mode is safe to set. The key is read from GROQ_API_KEY.
+    """
+    if not GROQ_API_KEY:
+        return "", "GROQ_API_KEY not set (add it to backend/.env)"
+    payload: Dict[str, Any] = {
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": 0,
+        "max_tokens": max_output_tokens,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    resp = None
+    try:
+        resp = requests.post(f"{GROQ_URL}/chat/completions", json=payload,
+                             headers=headers, timeout=GROQ_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices") or []
+        text = (choices[0].get("message") or {}).get("content", "") if choices else ""
+        if not text or not text.strip():
+            return "", "empty response from Groq"
+        return text, None
+    except requests.exceptions.ConnectionError as exc:
+        return "", f"Groq unreachable at {GROQ_URL}: {exc}"
+    except requests.exceptions.Timeout:
+        return "", f"Groq request timed out after {GROQ_TIMEOUT}s (model={GROQ_MODEL})"
+    except requests.exceptions.HTTPError as exc:
+        # Surface Groq's error body (rate limit / bad model / auth) to aid debugging.
+        body = resp.text[:300] if resp is not None else ""
+        return "", f"Groq HTTP error: {exc} {body}"
+    except Exception as exc:  # noqa: BLE001
+        return "", f"Groq error: {exc}"
 
 
 def _safe_json_loads(text: str) -> tuple[Any, Optional[str]]:

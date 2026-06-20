@@ -16,11 +16,6 @@ __pycache__/
 venv/
 env/
 
-# --- Feature store (generated SQLite DB) ---
-feature_store.sqlite
-feature_store.sqlite-wal
-feature_store.sqlite-shm
-
 # --- Runtime I/O: ignore ALL contents of these dirs, but keep the empty
 #     folders themselves (each has a .gitignore that excludes itself). ---
 #   samples/  — uploaded APKs (runtime input)
