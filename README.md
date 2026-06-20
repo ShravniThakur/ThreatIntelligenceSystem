@@ -1,11 +1,8 @@
-# ThreatIntelligenceSystem
+# APK Threat Intelligence System
 
 **AI-Powered Android Malware Analysis & Banking Trojan Detection Platform**
 
-A comprehensive malware analysis system that combines static & dynamic APK
-analysis, machine learning, malware DNA fingerprinting, intent-spoof detection,
-and GenAI-powered reverse engineering to detect Android malware, banking
-trojans, and fake banking applications.
+A comprehensive malware analysis system that combines static & dynamic APK analysis, machine learning, malware DNA fingerprinting, intent-spoof detection, and GenAI-powered reverse engineering to detect Android malware, banking trojans, and fake banking applications.
 
 ---
 
@@ -14,21 +11,8 @@ trojans, and fake banking applications.
 The system has four moving parts. The two you run yourself live in this repo;
 the other two are external services the backend talks to over HTTP.
 
-```
-                         ┌─────────────────────────────┐
-   Browser ── :5173 ──▶  │  frontend/  (Vite + React)  │
-                         └──────────────┬──────────────┘
-                                        │ HTTP + SSE
-                         ┌──────────────▼──────────────┐
-                         │  backend/   (FastAPI :8001) │
-                         │  scoring · fusion · GenAI   │
-                         └───────┬───────────────┬─────┘
-                                 │               │
-                    ┌────────────▼──────┐  ┌─────▼──────────────┐
-                    │ MobSF  (:8000)    │  │ Ollama  (:11434)   │
-                    │ static + dynamic  │  │ local LLM (gemma3) │
-                    └───────────────────┘  └────────────────────┘
-```
+<img width="1600" height="768" alt="image" src="https://github.com/user-attachments/assets/784bee17-f20c-4b7b-8b0a-145b9c6edfab" />
+
 
 | Component   | Path         | What it is                                                            |
 |-------------|--------------|-----------------------------------------------------------------------|
