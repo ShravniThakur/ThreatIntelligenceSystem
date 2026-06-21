@@ -60,7 +60,7 @@ pip install -r requirements.txt
 cp .env.example .env               # then edit .env (see Configuration below)
 ```
 
-### 3. MobSF (static + dynamic analysis engine)
+### 3a. MobSF (static + dynamic analysis engine)
 
 MobSF runs as its own server — it does **not** go in the backend venv, and it is
 **not** committed to this repo. Clone and install it locally (a local install is
@@ -117,16 +117,16 @@ ollama pull gemma3                  # download the model (or `ollama pull phi` f
 cd frontend
 npm install                         # if the npm cache is root-owned: npm install --cache /tmp/npmcache
 ```
+### 6. Train the ML Model (One-Time Setup)
 
----
+Before running the backend server, you must train the threat classifier. The script will automatically download the required datasets (~3,200 real-world APK static analysis reports) and generate the LightGBM model artifacts.
 
-### 0. Train the ML Model (One-Time Setup)
-Before starting the backend, you need to train the threat classifier. The script will automatically download the required datasets (~3,200 real-world APK static analysis reports) and generate the model artifacts.
 ```bash
 cd backend
-source .venv/bin/activate
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 python model/train.py
 ```
+
 ## Running
 
 Start each service in its own terminal:
