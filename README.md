@@ -120,6 +120,13 @@ npm install                         # if the npm cache is root-owned: npm instal
 
 ---
 
+### 0. Train the ML Model (One-Time Setup)
+Before starting the backend, you need to train the threat classifier. The script will automatically download the required datasets (~3,200 real-world APK static analysis reports) and generate the model artifacts.
+```bash
+cd backend
+source .venv/bin/activate
+python model/train.py
+```
 ## Running
 
 Start each service in its own terminal:
