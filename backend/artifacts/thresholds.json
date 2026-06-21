@@ -1,0 +1,7 @@
+{
+  "banking_trojan": 0.16,
+  "sms_stealer": 0.15,
+  "spyware": 0.7,
+  "obfuscated_loader": 0.09,
+  "benign": 0.47
+}
