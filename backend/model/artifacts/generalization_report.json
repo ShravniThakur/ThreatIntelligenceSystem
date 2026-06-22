@@ -1,14 +1,12 @@
 {
-  "train_f1_macro": 0.9336,
-  "val_f1_macro": 0.8098,
-  "test_f1_macro": 0.7517,
-  "family_f1_macro": 0.7764,
-  "temporal_f1_macro": 0.8077,
-  "flags": [
-    "\u26a0 OVERFIT: train_f1 (0.9336) \u2212 val_f1 (0.8098) > 0.10"
-  ],
+  "train_f1_macro": 0.9781,
+  "val_f1_macro": 0.9335,
+  "test_f1_macro": 0.9226,
+  "family_f1_macro": 0.0,
+  "temporal_f1_macro": 0.0,
+  "flags": [],
   "conclusions": [
-    "Model generalizes acceptably to unseen families (gap=-0.0247).",
-    "Temporal generalization is adequate (gap=-0.0561)."
+    "Unseen-family generalization not evaluated (family split disabled).",
+    "Temporal generalization not evaluated (temporal split disabled)."
   ]
 }

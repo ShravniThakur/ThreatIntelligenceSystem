@@ -6,7 +6,8 @@ Loads ``artifacts/model.pkl`` (a dict of {model, thresholds, feature_names,
 fit_medians}) and exposes :func:`classify`, which takes the pipeline's
 ``feature_row`` (the 85-feature ``FeatureVector`` as a dict — the model's
 ``feature_names`` are exactly those columns) and returns per-label probabilities
-+ thresholded predictions for the 7 threat categories.
++ thresholded predictions for the model's threat categories (label order taken
+from the model artifact, not hardcoded here).
 
 Two deliberate choices for a clean integration:
   * **No training deps.** ``model.pkl`` was pickled with the wrapper class living
@@ -16,8 +17,8 @@ Two deliberate choices for a clean integration:
     serving needs only numpy + pandas + lightgbm + scikit-learn, never shap.
   * **Never raises, fully optional.** If those ML deps or the pickle are missing,
     :func:`classify` returns ``{"available": False, "error": ...}`` and the pipeline
-    carries on. The result is flagged ``"prototype": True`` (synthetic training data)
-    and is NOT fed into the fusion verdict.
+    carries on. The result is flagged ``"prototype": True`` (experimental — surfaced
+    with a disclaimer) and is NOT fed into the fusion verdict.
 """
 
 from __future__ import annotations
@@ -26,14 +27,15 @@ import os
 import pickle
 from typing import Any, Dict, Optional
 
-# Canonical label order — MUST match the estimator/column order the model was
-# trained with (train.py TARGET_LABELS).
-TARGET_LABELS = [
+# Fallback label order, used only if the loaded model.pkl carries no label info.
+# The authoritative label order at serving time is derived from the model
+# artifact itself (the ``thresholds`` keys, which train.py writes in TARGET_LABELS
+# order), so the serving path tracks whatever label set the model was trained on
+# — 5, 7, or otherwise — without code changes here.
+_DEFAULT_LABELS = [
     "banking_trojan",
     "sms_stealer",
     "spyware",
-    "ransomware",
-    "adware",
     "obfuscated_loader",
     "benign",
 ]
@@ -78,11 +80,16 @@ class _RemapUnpickler(pickle.Unpickler):
 
 
 class _Model:
-    def __init__(self, model, thresholds, feature_names, fit_medians) -> None:
+    def __init__(self, model, thresholds, feature_names, fit_medians,
+                 labels=None) -> None:
         self.model = model
         self.thresholds = thresholds or {}
         self.feature_names = list(feature_names or [])
         self.fit_medians = fit_medians
+        # Authoritative label order: prefer an explicit list, else the thresholds
+        # keys (train.py inserts them in TARGET_LABELS order), else the fallback.
+        self.labels = list(labels) if labels else (
+            list(self.thresholds.keys()) or list(_DEFAULT_LABELS))
 
     def _median(self, feature: str) -> float:
         try:
@@ -112,7 +119,7 @@ class _Model:
         X = pd.DataFrame([vals], columns=self.feature_names)
         probs = self.model.predict_proba(X)[0]
         out: Dict[str, Dict[str, Any]] = {}
-        for i, lbl in enumerate(TARGET_LABELS):
+        for i, lbl in enumerate(self.labels):
             p = float(probs[i])
             thr = float(self.thresholds.get(lbl, 0.5))
             out[lbl] = {"probability": round(p, 4), "prediction": bool(p >= thr)}
@@ -140,6 +147,7 @@ def _load() -> _Model:
         payload.get("thresholds"),
         payload.get("feature_names"),
         payload.get("fit_medians"),
+        payload.get("labels"),
     )
 
 
@@ -172,11 +180,11 @@ def _unavailable(error: str) -> Dict[str, Any]:
 
 
 def classify(feature_row: Dict[str, Any]) -> Dict[str, Any]:
-    """Classify one APK's feature_row across the 7 threat categories. Never raises.
+    """Classify one APK's feature_row across the model's threat categories. Never raises.
 
     Returns a JSON-serialisable dict. ``available`` is False (with ``error``) when
     the prototype model / its deps are absent. ``prototype`` is always True — the
-    model is trained on synthetic data and is experimental, not a real verdict.
+    classifier is experimental and surfaced with a disclaimer, not a real verdict.
     """
     clf, err = _get()
     if clf is None:

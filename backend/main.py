@@ -54,7 +54,7 @@ import campaign_store
 import fusion
 import report_generator
 from feature_store_pipeline import FeatureStorePipeline
-from model import predict as ml_predict   # prototype ML classifier (synthetic-trained)
+from model import predict as ml_predict   # ML classifier (real-dataset-trained, experimental)
 
 LOG = logging.getLogger("malware_api")
 logging.basicConfig(level=logging.INFO,
@@ -202,11 +202,11 @@ def run_job(apk_path: str, job: JobState, emit: Callable[[dict], None]) -> None:
         emit({"stage": "feature_score", "fs_score": fs_result.score,
               "fs_band": fs_result.risk_band})
 
-        # --- Stage 3.55: ML threat classification (PROTOTYPE — synthetic-trained) #
-        # Multi-label classifier over the same feature_row (7 threat categories).
-        # Standalone & experimental: surfaced with a prototype disclaimer and NOT
-        # fed into fusion. Degrades to available=False if the ML deps/model are
-        # missing — never raises.
+        # --- Stage 3.55: ML threat classification (LightGBM, real-dataset-trained) #
+        # Multi-label classifier over the same feature_row (threat categories taken
+        # from the trained model). Standalone & experimental: surfaced with a
+        # prototype disclaimer and NOT fed into fusion. Degrades to available=False
+        # if the ML deps/model are missing — never raises.
         job.stage = "ml_classification"
         emit({"stage": "ml_classification"})
         ml_result = ml_predict.classify(feature_row)
@@ -341,7 +341,7 @@ def run_job(apk_path: str, job: JobState, emit: Callable[[dict], None]) -> None:
                 "total_analyzed": campaign_result.total_analyzed,
                 "error": campaign_result.error,
             },
-            # Prototype ML classifier (synthetic-trained — experimental, not in fusion)
+            # ML classifier (real-dataset-trained — experimental, not in fusion)
             "ml_classification": ml_result,
             # feature-store evidence
             "fired_rules": [dataclasses.asdict(r) for r in fs_result.fired_rules],

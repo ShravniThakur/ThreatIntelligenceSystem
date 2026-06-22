@@ -1,5 +1,11 @@
 {
-  "detected_leakage_columns": [],
-  "reason": {},
-  "warning_issued": false
+  "detected_leakage_columns": [
+    "analysis_timestamp",
+    "apk_filename"
+  ],
+  "reason": {
+    "apk_filename": "Matches leakage pattern: 'filename'",
+    "analysis_timestamp": "Matches leakage pattern: 'timestamp'"
+  },
+  "warning_issued": true
 }

@@ -1,18 +1,55 @@
 {
-  "original_feature_count": 84,
-  "after_zero_variance": 84,
-  "after_high_correlation": 83,
-  "removed_zero_variance": [],
+  "original_feature_count": 87,
+  "after_zero_variance": 82,
+  "after_high_correlation": 75,
+  "removed_zero_variance": [
+    "static_analysis_success",
+    "dynamic_analysis_success",
+    "malware_perm_count",
+    "short_string_ratio",
+    "feat_hidden_network"
+  ],
   "removed_high_correlation": [
-    "apkid_anti_vm_checks"
+    "exported_total",
+    "static_domain_count",
+    "api_base64_count",
+    "manifest_unprotected_exported",
+    "manifest_high_count",
+    "exported_activities",
+    "manifest_warning_count"
   ],
   "correlation_groups": [
     [
-      "feat_anti_vm_detected",
-      "apkid_anti_vm_checks"
+      "api_ipc_count",
+      "api_base64_count"
+    ],
+    [
+      "static_url_count",
+      "static_domain_count"
+    ],
+    [
+      "exported_activities",
+      "manifest_unprotected_exported",
+      "manifest_warning_count"
+    ],
+    [
+      "exported_total",
+      "manifest_unprotected_exported",
+      "manifest_warning_count",
+      "exported_activities"
+    ],
+    [
+      "appsec_high_count",
+      "manifest_high_count"
+    ],
+    [
+      "appsec_warning_count",
+      "manifest_warning_count",
+      "exported_total"
     ]
   ],
   "final_features": [
+    "confidence_level",
     "perm_internet",
     "perm_send_sms",
     "perm_read_sms",
@@ -29,12 +66,10 @@
     "perm_write_settings",
     "dangerous_perm_count",
     "total_perm_count",
-    "malware_perm_count",
     "api_file_io_count",
     "api_tcp_count",
     "api_crypto_count",
     "api_reflection_count",
-    "api_base64_count",
     "api_ipc_count",
     "api_message_digest_count",
     "code_ecb_mode",
@@ -42,15 +77,11 @@
     "code_total_findings",
     "manifest_debuggable",
     "manifest_allow_backup",
-    "manifest_unprotected_exported",
-    "manifest_high_count",
-    "manifest_warning_count",
     "manifest_min_sdk",
     "manifest_target_sdk",
     "cert_debug_signed",
     "cert_high_findings",
     "cert_warning_findings",
-    "static_domain_count",
     "static_url_count",
     "static_http_count",
     "static_http_ratio",
@@ -58,20 +89,18 @@
     "static_ofac_domains",
     "firebase_url_count",
     "secrets_count",
+    "apkid_anti_vm_checks",
     "apkid_unknown_compiler",
     "apkid_suspicious_compiler",
     "apkid_dex_count",
     "binary_total_libs",
     "binary_unfortified_ratio",
     "binary_all_stripped",
-    "exported_activities",
     "exported_services",
     "exported_receivers",
-    "exported_total",
     "strings_code_count",
     "avg_string_entropy",
     "max_string_entropy",
-    "short_string_ratio",
     "appsec_score",
     "appsec_high_count",
     "appsec_warning_count",
@@ -94,7 +123,6 @@
     "feat_sms_trifecta",
     "feat_overlay_accessibility",
     "feat_anti_vm_detected",
-    "feat_hidden_network",
     "feat_obfuscated_suspicious"
   ]
 }

@@ -791,26 +791,39 @@ def generalization_report(
         report["flags"].append(msg)
         logger.warning(msg)
 
-    gap = test_f1 - family_f1
-    if gap > 0.10:
-        report["conclusions"].append(
-            f"Model does NOT generalize well to unseen families (gap={gap:.4f}). "
-            "Consider collecting more diverse training data or domain adaptation."
-        )
+    # Family / temporal conclusions are only meaningful when those splits exist.
+    # They are disabled in split_dataset() (empty -> f1_macro == 0.0); reporting a
+    # gap against an empty split would falsely claim the model fails to generalize.
+    if family_f1 > 0.0:
+        gap = test_f1 - family_f1
+        if gap > 0.10:
+            report["conclusions"].append(
+                f"Model does NOT generalize well to unseen families (gap={gap:.4f}). "
+                "Consider collecting more diverse training data or domain adaptation."
+            )
+        else:
+            report["conclusions"].append(
+                f"Model generalizes acceptably to unseen families (gap={gap:.4f})."
+            )
     else:
         report["conclusions"].append(
-            f"Model generalizes acceptably to unseen families (gap={gap:.4f})."
+            "Unseen-family generalization not evaluated (family split disabled)."
         )
 
-    t_gap = test_f1 - temporal_f1
-    if t_gap > 0.10:
-        report["conclusions"].append(
-            f"Model shows temporal degradation (gap={t_gap:.4f}). "
-            "Newer malware samples may exhibit concept drift."
-        )
+    if temporal_f1 > 0.0:
+        t_gap = test_f1 - temporal_f1
+        if t_gap > 0.10:
+            report["conclusions"].append(
+                f"Model shows temporal degradation (gap={t_gap:.4f}). "
+                "Newer malware samples may exhibit concept drift."
+            )
+        else:
+            report["conclusions"].append(
+                f"Temporal generalization is adequate (gap={t_gap:.4f})."
+            )
     else:
         report["conclusions"].append(
-            f"Temporal generalization is adequate (gap={t_gap:.4f})."
+            "Temporal generalization not evaluated (temporal split disabled)."
         )
 
     logger.info("── Generalization Report ──")
@@ -1198,9 +1211,27 @@ def run_pipeline(features_path: str, labels_path: str, output_dir: str) -> None:
 #     )
 
 def parse_args():
+    # Resolve defaults relative to this file so `python model/train.py` works from
+    # backend/ regardless of cwd: data lives in backend/, artifacts in model/.
+    here = Path(__file__).resolve().parent          # .../backend/model
+    backend_dir = here.parent                        # .../backend
     parser = argparse.ArgumentParser(description="Train the APK classifier.")
-    # Add the default paths right here!
-    parser.add_argument("--features", type=str, default="data/feature_store.sqlite", help="Path to SQLite features")
-    parser.add_argument("--labels", type=str, default="data/labels.csv", help="Path to labels CSV")
-    parser.add_argument("--output_dir", type=str, default="artifacts", help="Output directory")
+    parser.add_argument("--features", type=str,
+                        default=str(backend_dir / "feature_store.sqlite"),
+                        help="Path to SQLite features")
+    parser.add_argument("--labels", type=str,
+                        default=str(backend_dir / "labels.csv"),
+                        help="Path to labels CSV")
+    parser.add_argument("--output_dir", type=str,
+                        default=str(here / "artifacts"),
+                        help="Output directory")
     return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    run_pipeline(
+        features_path=args.features,
+        labels_path=args.labels,
+        output_dir=args.output_dir,
+    )
