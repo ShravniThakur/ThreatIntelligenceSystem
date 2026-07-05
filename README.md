@@ -1,6 +1,6 @@
 # APK Threat Intelligence System
 
-**AI-Powered Android Malware Analysis & Banking Trojan Detection Platform**
+**AI-Powered Android Malware Detection and Analysis Platform**
 
 A comprehensive malware analysis system that combines static & dynamic APK analysis, machine learning, malware DNA fingerprinting, intent-spoof detection, and GenAI-powered reverse engineering to detect Android malware, banking trojans, and fake banking applications.
 
@@ -20,7 +20,7 @@ the other two are external services the backend talks to over HTTP.
 | Frontend    | `frontend/`  | Vite + React + Tailwind console on **:5173** (dev) / served by the backend in prod. |
 | MobSF       | external     | Mobile Security Framework on **:8000** — does the actual static & dynamic APK analysis. Cloned & installed locally (see step 3). |
 | Ollama      | external     | Local LLM runtime on **:11434** — powers the GenAI reverse-engineering / report layer. No API key, runs offline. |
-| ML model    | `backend/model/` | Prototype synthetic-trained classifier. Standalone — degrades gracefully if its deps are missing. |
+| ML model    | `backend/model/` | LightGBM multi-label classifier trained on the local feature store (real APK static-analysis data). Standalone — degrades gracefully if its deps are missing. |
 | Sample APKs | `BankAPKS/`  | Genuine bank APKs used for testing (gitignored — not in the repo, see below). |
 
 ---
@@ -119,13 +119,29 @@ npm install                         # if the npm cache is root-owned: npm instal
 ```
 ### 6. Train the ML Model (One-Time Setup)
 
-Before running the backend server, you must train the threat classifier. The script will automatically download the required datasets (~3,200 real-world APK static analysis reports) and generate the LightGBM model artifacts.
+Before running the backend server, you must train the threat classifier. The
+script reads the local feature store (`backend/feature_store.sqlite`, ~3,200 real
+APK static-analysis feature rows) and the labels (`backend/labels.csv`), trains a
+LightGBM multi-label model, and writes the artifacts to `backend/model/artifacts/`.
 
 ```bash
 cd backend
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 python model/train.py
 ```
+
+Training also needs `shap` and `matplotlib` (for the SHAP explanation plots) on
+top of the inference deps in `requirements.txt`:
+
+```bash
+pip install shap matplotlib
+```
+
+**Current model (5-label, trained on the bundled dataset):** macro-F1 **0.92** on
+a held-out random test split (train 0.98 → test 0.92, no overfit flag). Per-label
+test F1: banking_trojan 0.97, spyware 0.95, obfuscated_loader 0.90, sms_stealer
+0.80, benign 0.99. The classifier is **experimental and standalone** — it is
+surfaced with a disclaimer and is **not** fed into the fusion verdict.
 
 ## Running
 
@@ -214,7 +230,7 @@ The frontend reads `VITE_API_BASE` (build-time): unset → defaults to
 │   ├── dna_fingerprint.py    APK DNA fingerprinting (repackaged-clone detection)
 │   ├── campaign_store.py     campaign clustering across analyses
 │   ├── report_generator.py   final GenAI report
-│   ├── model/                prototype ML classifier (predict.py / train.py)
+│   ├── model/                ML classifier — LightGBM (predict.py / train.py)
 │   ├── bank_whitelist.json   known-good bank app fingerprints
 │   ├── requirements.txt
 │   └── .env.example          ← copy to .env
